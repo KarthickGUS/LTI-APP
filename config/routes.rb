@@ -2,6 +2,7 @@ Rails.application.routes.draw do
   scope :lti do
     post "launch", to: "lti#launch"
     post "oidc",   to: "lti#oidc"
+    post "account_details", to: "lti#account_details"
   end
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 

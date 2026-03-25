@@ -66,6 +66,8 @@ gem "ims-lti"
 
 gem "jwt"
 
+gem "httparty"
+
 group :development do
   gem "pry"
   gem "pry-rails"

@@ -68,6 +68,44 @@ class LtiController < ApplicationController
       render plain: "Invalid ID Token ❌"
     end
   end
+
+  def account_details
+    if params[:error]
+      render plain: "LTI Error: #{params[:error_description]}"
+      return
+    end
+
+    if params[:state] != session[:lti_state]
+      render plain: "Invalid state"
+      return
+    end
+
+    id_token = params[:id_token]
+
+    if id_token.blank?
+      render plain: "Missing id_token"
+      nil
+    end
+
+    begin
+      decoded_token = decode_lti_token(id_token)
+      # access_token = get_canvas_access_token(decoded_token)
+
+      token = ENV["CANVAS_API_TOKEN"]
+      base_url = ENV["CANVAS_BASE_URL"]
+
+      response = HTTParty.get(
+        "#{base_url}/api/v1/users/self/courses",
+        headers: { "Authorization" => "Bearer #{token}" }
+      )
+
+      @courses = JSON.parse(response.body)
+
+    rescue => e
+      Rails.logger.error "LTI Decode Error: #{e.message}"
+      render plain: "Invalid ID Token ❌"
+    end
+  end
   private
 
   def decode_lti_token(id_token)
@@ -99,5 +137,35 @@ class LtiController < ApplicationController
     )
 
     decoded.first
+  end
+
+  def get_canvas_access_token(decoded_token)
+    token_url = "http://localhost:3000/login/oauth2/token"
+
+    response = HTTParty.post(token_url, body: {
+      grant_type: "client_credentials",
+      client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+      client_assertion: generate_client_assertion(decoded_token),
+      scope: "url:GET|/api/v1/users/self/courses"
+    })
+    binding.pry
+
+    JSON.parse(response.body)["access_token"]
+  end
+
+
+  def generate_client_assertion(decoded_token)
+    payload = {
+      iss: decoded_token["aud"],
+      sub: decoded_token["aud"],
+      aud: "http://localhost:3000/login/oauth2/token",
+      iat: Time.now.to_i,
+      exp: Time.now.to_i + 300,
+      jti: SecureRandom.uuid
+    }
+
+    private_key = OpenSSL::PKey::RSA.new(File.read("config/keys/private.key"))
+
+    JWT.encode(payload, private_key, "RS256", { kid: "ai-assistant-key" })
   end
 end
