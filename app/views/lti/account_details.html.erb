@@ -1,65 +1,160 @@
-<h2>Courses Detailed View</h2>
-
 <style>
-  table {
-    border-collapse: collapse;
-    width: 100%;
-    font-size: 14px;
+  .layout-container {
+    font-family: "Lato", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    background: #f5f5f5;
+    padding: 20px;
   }
 
-  th {
-    background-color: #f2f2f2;
-  }
-
-  th, td {
+  .filter-bar {
+    background: #ffffff;
+    padding: 15px;
     border: 1px solid #ddd;
-    padding: 8px;
-    vertical-align: top;
-    min-width: 100px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
   }
 
-  tr:hover {
-    background-color: #f9f9f9;
+  .select-field {
+    padding: 8px;
+    border: 1px solid #c7cdd1;
+    border-radius: 3px;
+    min-width: 250px;
+  }
+
+  .btn-primary {
+    background: #0374b5;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+
+  .btn-secondary {
+    background: #e0e0e0;
+    padding: 8px 12px;
+    border-radius: 3px;
+    text-decoration: none;
+    color: black;
+  }
+
+  .btn-export {
+    background: #2d3b45;
+    color: white;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 3px;
+    cursor: pointer;
+    margin-left: auto;
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+  }
+
+  .data-table th {
+    text-align: left;
+    background: #f5f5f5;
+    padding: 10px;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .data-table td {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+  }
+
+  .url-col {
+    max-width: 430px;
+    word-break: break-all;
   }
 </style>
 
-<table>
-  <thead>
-    <tr>
-      <% @courses.first.keys.each do |key| %>
-        <th><%= key.humanize %></th>
+<div class="layout-container">
+
+  <div class="filter-bar">
+    <label>User</label>
+
+    <select id="user_select" class="select-field">
+      <option value="">Select User</option>
+      <% @users.each do |user| %>
+        <option value="<%= user[:id] %>"><%= user[:name] %></option>
       <% end %>
-    </tr>
-  </thead>
+    </select>
 
-  <tbody>
-    <% @courses.each do |course| %>
+    <button class="btn-export">Export</button>
+  </div>
+
+  <table class="data-table">
+    <thead>
       <tr>
-        <% course.each do |key, value| %>
-          <td>
-            <% if value.is_a?(Hash) %>
-              <%# Handle nested hash like calendar %>
-              <% value.each do |k, v| %>
-                <b><%= k %>:</b> <%= v %><br>
-              <% end %>
-
-            <% elsif value.is_a?(Array) %>
-              <%# Handle enrollments array %>
-              <% value.each do |item| %>
-                <div style="margin-bottom: 5px;">
-                  <% item.each do |k, v| %>
-                    <b><%= k %>:</b> <%= v %><br>
-                  <% end %>
-                </div>
-                <hr>
-              <% end %>
-
-            <% else %>
-              <%= value %>
-            <% end %>
-          </td>
-        <% end %>
+        <th class="url-col">URL</th>
+        <th>Interaction (sec)</th>
+        <th>Context Type</th>
+        <th>Visited Time</th>
       </tr>
-    <% end %>
-  </tbody>
-</table>
+    </thead>
+    <tbody id="page_views_table">
+      <tr>
+        <td colspan="4">Select a user</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<script>
+  $('#user_select').on('change', function () {
+    const userId = $(this).val();
+
+    if (!userId) {
+      $('#page_views_table').html('<tr><td colspan="4">Select a user</td></tr>');
+      return;
+    }
+
+    $('#page_views_table').html('<tr><td colspan="4">Loading...</td></tr>');
+
+    $.ajax({
+      url: '/accounts/page_views',
+      method: 'GET',
+      data: { user_id: userId },
+      headers: {
+        "ngrok-skip-browser-warning": "true"
+      },
+      success: function (data) {
+
+        if (data.length === 0) {
+          $('#page_views_table').html('<tr><td colspan="4">No data found</td></tr>');
+          return;
+        }
+
+        let rows = '';
+
+        $.each(data, function (i, pv) {
+          rows += `
+            <tr>
+              <td class="url-col">${pv.url || ''}</td>
+              <td>${pv.interaction_seconds || 0}</td>
+              <td>${pv.context_type || ''}</td>
+              <td>${pv.visited_at || ''}</td>
+            </tr>
+          `;
+        });
+
+        $('#page_views_table').html(rows);
+      },
+      error: function (xhr) {
+        console.error("Status:", xhr.status);
+        console.error("Response:", xhr.responseText);
+
+        $('#page_views_table').html('<tr><td colspan="4">Error loading data</td></tr>');
+      }
+    });
+
+  });
+
+</script>

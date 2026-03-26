@@ -69,6 +69,88 @@ class LtiController < ApplicationController
     end
   end
 
+  # def account_details
+  #   # 🔴 Handle LTI errors
+  #   if params[:error]
+  #     render plain: "LTI Error: #{params[:error_description]}"
+  #     return
+  #   end
+
+  #   # 🔴 Validate state
+  #   if params[:state] != session[:lti_state]
+  #     render plain: "Invalid state"
+  #     return
+  #   end
+
+  #   # 🔴 Decode LTI token
+  #   id_token = params[:id_token]
+  #   return render plain: "Missing id_token" if id_token.blank?
+
+  #   decoded_token = decode_lti_token(id_token)
+
+  #   # ==============================
+  #   # 🔵 STATIC ENV VALUES (HARDCODE)
+  #   # ==============================
+  #   canvas_url     = "http://localhost:3000"
+  #   client_id      = "10000000000003"
+  #   client_secret  = "6265f441-b9d2-48f4-bbd3-d462c855b28c"
+  #   redirect_uri   = "https://unefficacious-unflatteringly-hailey.ngrok-free.dev/lti/account_details"
+
+  #   # ==============================
+  #   # 🟡 STEP 1: If NO code → redirect to OAuth
+  #   # ==============================
+  #   if params[:code].blank?
+  #     oauth_url = "#{canvas_url}/login/oauth2/auth?" +
+  #       "client_id=#{client_id}" +
+  #       "&response_type=code" +
+  #       "&redirect_uri=#{redirect_uri}"
+  #     redirect_to oauth_url, allow_other_host: true
+  #     return
+  #   end
+
+  #   # ==============================
+  #   # 🟢 STEP 2: Exchange code → access token
+  #   # ==============================
+  #   response = HTTParty.post(
+  #     "#{canvas_url}/login/oauth2/token",
+  #     body: {
+  #       grant_type: "authorization_code",
+  #       client_id: client_id,
+  #       client_secret: client_secret,
+  #       redirect_uri: redirect_uri,
+  #       code: params[:code]
+  #     }
+  #   )
+
+  #   body = JSON.parse(response.body)
+
+  #   if body["error"]
+  #     render plain: "Token Error: #{body['error_description']}"
+  #     return
+  #   end
+
+  #   access_token = body["access_token"]
+
+  #   # ==============================
+  #   # 🟢 STEP 3: Call Canvas API
+  #   # ==============================
+  #   courses_response = HTTParty.get(
+  #     "#{canvas_url}/api/v1/users/self/courses",
+  #     headers: {
+  #       "Authorization" => "Bearer #{access_token}"
+  #     }
+  #   )
+
+  #   @courses = JSON.parse(courses_response.body)
+
+  #   # ==============================
+  #   # 🟢 STEP 4: Render View
+  #   # ==============================
+  #   render :courses
+  # end
+  #
+  #
+
   def account_details
     if params[:error]
       render plain: "LTI Error: #{params[:error_description]}"
@@ -81,32 +163,67 @@ class LtiController < ApplicationController
     end
 
     id_token = params[:id_token]
-
-    if id_token.blank?
-      render plain: "Missing id_token"
-      nil
-    end
+    return render plain: "Missing id_token" if id_token.blank?
 
     begin
       decoded_token = decode_lti_token(id_token)
-      # access_token = get_canvas_access_token(decoded_token)
 
-      token = ENV["CANVAS_API_TOKEN"]
-      base_url = ENV["CANVAS_BASE_URL"]
+      account_id = extract_account_id(decoded_token)
 
-      response = HTTParty.get(
-        "#{base_url}/api/v1/users/self/courses",
-        headers: { "Authorization" => "Bearer #{token}" }
-      )
+      service = CanvasApiService.new
+      users   = service.fetch_users(account_id)
 
-      @courses = JSON.parse(response.body)
+      # Filter params
+      search_id   = params[:user_id]
+      search_name = params[:name]
+
+      filtered_users = users.select do |user|
+        match_id = search_id.present? ? user["id"].to_s == search_id.to_s : true
+        match_name = search_name.present? ? user["name"].to_s.downcase.include?(search_name.downcase) : true
+
+        match_id && match_name
+      end
+
+      @users = filtered_users.map do |u|
+        {
+          id: u["id"],
+          name: u["name"]
+        }
+      end
 
     rescue => e
-      Rails.logger.error "LTI Decode Error: #{e.message}"
-      render plain: "Invalid ID Token ❌"
+      Rails.logger.error "LTI Error: #{e.message}"
+      render plain: "Something went wrong ❌"
     end
   end
-  private
+
+private
+
+  def get_canvas_access_token(decoded_token)
+    token_url = "http://localhost:3000/login/oauth2/token"
+
+    response = HTTParty.post(token_url, body: {
+      grant_type: "client_credentials",
+      client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+      client_assertion: generate_client_assertion(decoded_token),
+      scope: [
+          "https://purl.imsglobal.org/spec/lti-ags/scope/lineitem",
+          "https://purl.imsglobal.org/spec/lti-ags/scope/result.readonly",
+          "https://purl.imsglobal.org/spec/lti-nrps/scope/contextmembership.readonly"
+        ].join(" ")
+    })
+    JSON.parse(response.body)["access_token"]
+  end
+
+
+  def get_courses(access_token)
+    HTTParty.get(
+      "http://localhost:3000/api/v1/users/self/courses",
+      headers: {
+        "Cookie" => request.headers["Cookie"]
+      }
+    )
+  end
 
   def decode_lti_token(id_token)
     unverified = JWT.decode(id_token, nil, false)
@@ -139,25 +256,11 @@ class LtiController < ApplicationController
     decoded.first
   end
 
-  def get_canvas_access_token(decoded_token)
-    token_url = "http://localhost:3000/login/oauth2/token"
-
-    response = HTTParty.post(token_url, body: {
-      grant_type: "client_credentials",
-      client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-      client_assertion: generate_client_assertion(decoded_token),
-      scope: "url:GET|/api/v1/users/self/courses"
-    })
-    binding.pry
-
-    JSON.parse(response.body)["access_token"]
-  end
-
-
   def generate_client_assertion(decoded_token)
+    client_id = decoded_token["aud"]
     payload = {
-      iss: decoded_token["aud"],
-      sub: decoded_token["aud"],
+      iss: client_id,
+      sub: client_id,
       aud: "http://localhost:3000/login/oauth2/token",
       iat: Time.now.to_i,
       exp: Time.now.to_i + 300,
@@ -166,6 +269,13 @@ class LtiController < ApplicationController
 
     private_key = OpenSSL::PKey::RSA.new(File.read("config/keys/private.key"))
 
-    JWT.encode(payload, private_key, "RS256", { kid: "ai-assistant-key" })
+    JWT.encode(payload, private_key, "RS256", kid: "ai-assistant-key")
+  end
+
+  def extract_account_id(decoded_token)
+    return_url = decoded_token["https://purl.imsglobal.org/spec/lti/claim/launch_presentation"]["return_url"]
+
+    account_id = return_url.match(/accounts\/(\d+)/)&.captures&.first
+    account_id
   end
 end
