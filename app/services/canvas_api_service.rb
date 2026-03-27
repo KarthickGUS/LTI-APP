@@ -57,4 +57,15 @@ class CanvasApiService
 
     JSON.parse(response.body)[0]["name"]
   end
+
+  def fetch_grade_history(course_id)
+    response = HTTParty.get(
+      "#{@base_url}/api/v1/courses/#{course_id}/gradebook_history/feed",
+      headers: @headers
+    )
+
+    raise "Canvas API Error" unless response.code == 200
+
+    JSON.parse(response.body)
+  end
 end

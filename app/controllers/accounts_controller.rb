@@ -46,4 +46,30 @@ class AccountsController < ApplicationController
       has_prev: page > 1
     }
   end
+
+  def grade_history
+    return render json: [] if params[:user_id].blank?
+
+    course_id = params[:course_id]
+
+    service = CanvasApiService.new
+    history = service.fetch_grade_history(course_id)
+
+    user_history = history.select { |h| h["user_id"].to_s == params[:user_id].to_s }
+
+    data = user_history.map do |h|
+      {
+        assignment_name: h["assignment_name"],
+        course_name: "Course #{course_id}", # or fetch real name if needed
+        score: h["score"],
+        grade: h["grade"],
+        grader: h["grader"],
+        graded_at: Time.parse(h["graded_at"])
+                        .in_time_zone("Asia/Kolkata")
+                        .strftime("%d %b %Y, %I:%M %p IST")
+      }
+    end
+
+    render json: data
+  end
 end

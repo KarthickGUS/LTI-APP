@@ -112,7 +112,8 @@
   }
 
   #pagination_controls {
-    margin-top: 10px;
+    margin-top: 40px;
+    margin-left: 80%;
   }
 
   .data-table {
@@ -184,7 +185,11 @@
               <th>Render Time</th>
             </tr>
           </thead>
-          <tbody id="page_views_table"></tbody>
+          <tbody id="page_views_table">
+            <tr>
+              <td colspan="6">Select a user</td>
+            </tr>
+          </tbody>
         </table>
       </div>
 
@@ -210,15 +215,17 @@
         <table class="data-table">
           <thead>
             <tr>
-              <th>Course</th>
               <th>Assignment</th>
+              <th>Course</th>
               <th>Score</th>
+              <th>Grade</th>
+              <th>Grader</th>
               <th>Graded At</th>
             </tr>
           </thead>
           <tbody id="grade_table">
             <tr>
-              <td colspan="4">No data yet</td>
+              <td colspan="6">Select a user</td>
             </tr>
           </tbody>
         </table>
@@ -281,6 +288,7 @@
     if (!currentUserId) return;
 
     loadPage(currentPage);
+    loadGradeHistory(currentUserId, 34); 
   });
 
   $('#next_btn').on('click', function () {
@@ -353,6 +361,52 @@
 
       error: function () {
         $('#page_views_table').html('<tr><td colspan="4">Error loading data</td></tr>');
+      }
+    });
+  }
+  
+  function loadGradeHistory(userId, courseId) {
+
+    $('#grade_table').html('<tr><td colspan="6">Loading...</td></tr>');
+
+    $.ajax({
+      url: '/accounts/grade_history',
+      method: 'GET',
+      data: {
+        user_id: userId,
+        course_id: courseId
+      },
+      headers: {
+        "ngrok-skip-browser-warning": "true"
+      },
+
+      success: function (data) {
+
+        if (!data || data.length === 0) {
+          $('#grade_table').html('<tr><td colspan="6">No data found</td></tr>');
+          return;
+        }
+
+        let rows = '';
+
+        $.each(data, function (i, g) {
+          rows += `
+            <tr>
+              <td>${g.assignment_name || ''}</td>
+              <td>${g.course_name || ''}</td>
+              <td>${g.score || 0}</td>
+              <td>${g.grade || ''}</td>
+              <td>${g.grader || ''}</td>
+              <td>${g.graded_at || ''}</td>
+            </tr>
+          `;
+        });
+
+        $('#grade_table').html(rows);
+      },
+
+      error: function () {
+        $('#grade_table').html('<tr><td colspan="6">Error loading data</td></tr>');
       }
     });
   }
