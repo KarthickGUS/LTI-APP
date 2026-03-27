@@ -72,3 +72,6 @@ group :development do
   gem "pry"
   gem "pry-rails"
 end
+
+gem "caxlsx"
+gem "caxlsx_rails"
