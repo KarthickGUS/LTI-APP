@@ -442,7 +442,7 @@
           }
 
           let renderTime = pv.render_time
-            ? (parseFloat(pv.render_time) * 1000).toFixed(3)
+            ? (parseFloat(pv.render_time)).toFixed(3)
             : '0.000';
 
           rows += `
@@ -561,13 +561,11 @@
 
         console.log("API RESPONSE:", data); // ✅ debug
 
-        // 🚨 HANDLE ERROR RESPONSE
         if (data.errors) {
           $("#graph_container").html(data.errors[0].message);
           return;
         }
 
-        // 🚨 HANDLE EMPTY / INVALID
         if (!Array.isArray(data) || data.length === 0) {
           $("#graph_container").html("No data available");
           return;
@@ -588,7 +586,6 @@
           maxScores.push(a.max_score ?? 0);
         });
 
-        // 🚨 if all empty
         if (labels.length === 0) {
           $("#graph_container").html("No valid data");
           return;
