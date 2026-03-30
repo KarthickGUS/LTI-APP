@@ -149,6 +149,9 @@
     <div class="card-header">
       <h2>Page View History</h2>
 
+    </div>
+
+    <div class="card-body">
       <div class="filter-bar">
         <label>User</label>
 
@@ -161,28 +164,21 @@
 
         <button id="export_btn" class="btn-export">Export</button>
       </div>
-    </div>
-
-    <div class="card-body">
 
       <div class="table-wrapper">
         <table class="data-table wide-table">
           <thead>
             <tr>
-              <th class="url-col">URL</th>
               <th>Course Name</th>
-              <th>Context Type</th>
-              <th>Controller</th>
+              <th>Context</th>
+              <th>Page</th>
+              <th class="url-col">URL</th>
               <th>Action</th>
-              <th class="small-col">Interaction</th>
+              <th class="small-col">Interaction (sec)</th>
               <th class="time-col">Visited Time</th>
               <th class="small-col">Participated</th>
               <th class="small-col">Contributed</th>
-              <th class="small-col">Summarized</th>
-              <th>Access ID</th>
-              <th>App Name</th>
-              <th>User Request</th>
-              <th>Render Time</th>
+              <th>Render Time(sec )</th>
             </tr>
           </thead>
           <tbody id="page_views_table">
@@ -210,25 +206,49 @@
     </div>
 
     <div class="card-body">
+      <div class="filter-bar">
+        <label>User</label>
 
-      <div class="table-wrapper">
+        <select id="grade_user_select" class="select-field">
+          <option value="">Select User</option>
+          <% @users.each do |user| %>
+            <option value="<%= user[:id] %>"><%= user[:name] %></option>
+          <% end %>
+        </select>
+
+        <select id="course_select" class="select-field">
+          <option value="">Select Course</option>
+        </select>
+
+      <button id="graph_btn" class="btn-primary" style="margin-left:10px;">
+        📊 View Graph
+      </button>
+
+        <button id="export_btn" class="btn-export">Export</button>
+      </div>
+
+      <div class="table-wrapper" id="table_views">
         <table class="data-table">
-          <thead>
-            <tr>
-              <th>Assignment</th>
-              <th>Course</th>
-              <th>Score</th>
-              <th>Grade</th>
-              <th>Grader</th>
-              <th>Graded At</th>
-            </tr>
-          </thead>
+        <thead>
+          <tr>
+            <th>Assignment</th>
+            <th>Points Possible</th>
+            <th>Max Score</th>
+            <th>Min Score</th>
+            <th>Median</th>
+            <th>On Time</th>
+            <th>Late</th>
+          </tr>
+        </thead>
           <tbody id="grade_table">
             <tr>
               <td colspan="6">Select a user</td>
             </tr>
           </tbody>
         </table>
+      </div>
+      <div id="graph_container" style="display:none; height:400px;">
+        <canvas id="pageViewChart"></canvas>
       </div>
 
     </div>
@@ -238,41 +258,86 @@
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
 
   $('#export_btn').on('click', function () {
 
-    let table = document.querySelector(".data-table");
-    let rows = table.querySelectorAll("tr");
+    let pageTable = document.querySelector("#page_views_table");
+    let pageHeaders = document.querySelectorAll(".data-table thead tr th");
 
-    let data = [];
+    let pageData = [];
 
-    rows.forEach((row, index) => {
-      let cols = row.querySelectorAll("th, td");
+    let headerRow = [];
+    pageHeaders.forEach(th => headerRow.push(th.innerText.trim()));
+    pageData.push(headerRow);
+
+    pageTable.querySelectorAll("tr").forEach(row => {
       let rowData = [];
-
-      cols.forEach(col => {
-        rowData.push(col.innerText.trim());
+      row.querySelectorAll("td").forEach(td => {
+        rowData.push(td.innerText.trim());
       });
-
-      data.push(rowData);
+      if (rowData.length) pageData.push(rowData);
     });
 
-    if (data.length <= 1) {
-      alert("No data to export");
-      return;
-    }
+    let gradeTable = document.querySelector("#grade_table");
 
-    // Create worksheet
-    let ws = XLSX.utils.aoa_to_sheet(data);
+    let gradeHeaders = [
+      "Assignment",
+      "Course",
+      "Score",
+      "Grade",
+      "Grader",
+      "Graded At"
+    ];
 
-    // Create workbook
+    let gradeData = [gradeHeaders];
+
+    gradeTable.querySelectorAll("tr").forEach(row => {
+      let rowData = [];
+      row.querySelectorAll("td").forEach(td => {
+        rowData.push(td.innerText.trim());
+      });
+      if (rowData.length) gradeData.push(rowData);
+    });
+
     let wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Page Views");
 
-    // Download
-    XLSX.writeFile(wb, "page_views.xlsx");
+    let ws1 = XLSX.utils.aoa_to_sheet(pageData);
+    ws1['!cols'] = [
+      { wch: 45 }, // URL
+      { wch: 25 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 15 },
+      { wch: 25 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 30 },
+      { wch: 20 }
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws1, "Page Views");
+
+    let ws2 = XLSX.utils.aoa_to_sheet(gradeData);
+    ws2['!cols'] = [
+      { wch: 30 },
+      { wch: 25 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 30 },
+      { wch: 25 }
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws2, "Grade History");
+
+    XLSX.writeFile(wb, "canvas_report.xlsx");
+
   });
 
 </script>
@@ -288,7 +353,38 @@
     if (!currentUserId) return;
 
     loadPage(currentPage);
-    loadGradeHistory(currentUserId, 34); 
+  });
+
+  $('#grade_user_select').on('change', function () {
+    const userId = $(this).val();
+
+    if (!userId) return;
+
+    $('#course_select').html('<option value="">Loading courses...</option>');
+
+    $.ajax({
+      url: '/accounts/courses',   // backend endpoint
+      method: 'GET',
+      data: { user_id: userId },
+      headers: {
+        "ngrok-skip-browser-warning": "true"
+      },
+
+      success: function (data) {
+
+        let options = '<option value="">Select Course</option>';
+
+        $.each(data, function (i, course) {
+          options += `<option value="${course.id}">${course.name}</option>`;
+        });
+
+        $('#course_select').html(options);
+      },
+
+      error: function () {
+        $('#course_select').html('<option>Error loading courses</option>');
+      }
+    });
   });
 
   $('#next_btn').on('click', function () {
@@ -330,22 +426,37 @@
         let rows = '';
 
         $.each(data, function (i, pv) {
+
+          let visitedTime = '';
+          if (pv.created_at) {
+            let date = new Date(pv.created_at);
+
+            visitedTime = date.toLocaleString(undefined, {
+              year: 'numeric',
+              month: 'short',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true
+            });
+          }
+
+          let renderTime = pv.render_time
+            ? (parseFloat(pv.render_time) * 1000).toFixed(3)
+            : '0.000';
+
           rows += `
             <tr>
-              <td class="url-col">${pv.url || ''}</td>
               <td>${pv.course_name || '-'}</td>
               <td>${pv.context_type || ''}</td>
               <td>${pv.controller || ''}</td>
+              <td class="url-col">${pv.url || ''}</td>
               <td>${pv.action || ''}</td>
-              <td>${pv.interaction_seconds || 0}</td>
-              <td>${pv.created_at || ''}</td>
-              <td>${pv.participated ? 'Yes' : 'No'}</td>
-              <td>${pv.contributed ? 'Yes' : 'No'}</td>
-              <td>${pv.summarized ? 'Yes' : 'No'}</td>
-              <td>${pv.asset_user_access_id || ''}</td>
-              <td>${pv.app_name}</td>
-              <td>${pv.user_request}</td>
-              <td>${pv.render_time}</td>
+              <td class="small-col">${pv.interaction_seconds || 0}</td>
+              <td class="time-col">${visitedTime}</td>
+              <td class="small-col">${pv.participated ? 'Yes' : 'No'}</td>
+              <td class="small-col">${pv.contributed ? 'Yes' : 'No'}</td>
+              <td>${renderTime}</td>
             </tr>
           `;
         });
@@ -354,7 +465,6 @@
 
         $('#page_info').text(`Page ${res.current_page}`);
 
-        // ✅ Enable / Disable buttons
         $('#prev_btn').prop('disabled', !res.has_prev);
         $('#next_btn').prop('disabled', !res.has_next);
       },
@@ -365,17 +475,15 @@
     });
   }
   
-  function loadGradeHistory(userId, courseId) {
+  function loadAssignmentAnalytics(courseId) {
 
-    $('#grade_table').html('<tr><td colspan="6">Loading...</td></tr>');
+    $('#grade_table').html('<tr><td colspan="7">Loading...</td></tr>');
+    const userId = $('#grade_user_select').val();
 
     $.ajax({
-      url: '/accounts/grade_history',
+      url: '/accounts/assignment_analytics',
       method: 'GET',
-      data: {
-        user_id: userId,
-        course_id: courseId
-      },
+      data: { course_id: courseId, user_id: userId },
       headers: {
         "ngrok-skip-browser-warning": "true"
       },
@@ -383,21 +491,23 @@
       success: function (data) {
 
         if (!data || data.length === 0) {
-          $('#grade_table').html('<tr><td colspan="6">No data found</td></tr>');
+          $('#grade_table').html('<tr><td colspan="7">No data found</td></tr>');
           return;
         }
 
         let rows = '';
 
-        $.each(data, function (i, g) {
+        $.each(data, function (i, a) {
+
           rows += `
             <tr>
-              <td>${g.assignment_name || ''}</td>
-              <td>${g.course_name || ''}</td>
-              <td>${g.score || 0}</td>
-              <td>${g.grade || ''}</td>
-              <td>${g.grader || ''}</td>
-              <td>${g.graded_at || ''}</td>
+              <td>${a.title || ''}</td>
+              <td>${a.points_possible || 0}</td>
+              <td>${a.max_score || 0}</td>
+              <td>${a.min_score || 0}</td>
+              <td>${a.median || 0}</td>
+              <td>${a.submission?.score || 0}</td>
+              <td>${a.status || '-'}</td>
             </tr>
           `;
         });
@@ -406,7 +516,144 @@
       },
 
       error: function () {
-        $('#grade_table').html('<tr><td colspan="6">Error loading data</td></tr>');
+        $('#grade_table').html('<tr><td colspan="7">Error loading data</td></tr>');
+      }
+    });
+  }
+
+  $('#course_select').on('change', function () {
+    const courseId = $(this).val();
+
+    if (!courseId) return;
+
+    loadAssignmentAnalytics(courseId);
+  });
+</script>
+
+<script>
+  let chartInstance = null;
+
+  $("#graph_btn").click(function () {
+
+    const courseId = $("#course_select").val();
+    const userId = $("#grade_user_select").val();
+
+    if (!courseId) {
+      alert("Please select a course");
+      return;
+    }
+
+    document.getElementById("table_views").style.display = "none";
+
+    $("#graph_container")
+      .show()
+      .html('<canvas id="assignmentChart"></canvas>');
+
+    $.ajax({
+      url: '/accounts/assignment_analytics',
+      method: "GET",
+      data: { course_id: courseId, user_id: userId },
+      headers: {
+        "ngrok-skip-browser-warning": "true"
+      },
+
+      success: function (data) {
+
+        console.log("API RESPONSE:", data); // ✅ debug
+
+        // 🚨 HANDLE ERROR RESPONSE
+        if (data.errors) {
+          $("#graph_container").html(data.errors[0].message);
+          return;
+        }
+
+        // 🚨 HANDLE EMPTY / INVALID
+        if (!Array.isArray(data) || data.length === 0) {
+          $("#graph_container").html("No data available");
+          return;
+        }
+
+        let labels = [];
+        let scores = [];
+        let maxScores = [];
+
+        data.forEach(a => {
+
+          // skip invalid records
+          if (!a.title) return;
+
+          labels.push(a.title);
+
+          scores.push(a.submission?.score ?? 0);
+          maxScores.push(a.max_score ?? 0);
+        });
+
+        // 🚨 if all empty
+        if (labels.length === 0) {
+          $("#graph_container").html("No valid data");
+          return;
+        }
+
+        renderChart(labels, scores, maxScores);
+      },
+
+      error: function (err) {
+        console.error(err);
+        $("#graph_container").html("Error loading chart");
+      }
+    });
+  });
+
+
+  function renderChart(labels, scores, maxScores) {
+
+    const canvas = document.getElementById("assignmentChart");
+
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+
+    if (chartInstance) {
+      chartInstance.destroy();
+    }
+
+    chartInstance = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: "User Score",
+            data: scores,
+            borderWidth: 2
+          },
+          {
+            label: "Max Score",
+            data: maxScores,
+            borderWidth: 2
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false, // ✅ FIX layout issues
+        plugins: {
+          legend: {
+            display: true
+          }
+        },
+        scales: {
+          x: {
+            ticks: {
+              maxRotation: 45,
+              minRotation: 45,
+              autoSkip: false
+            }
+          },
+          y: {
+            beginAtZero: true
+          }
+        }
       }
     });
   }

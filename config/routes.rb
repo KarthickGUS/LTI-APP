@@ -7,6 +7,8 @@ Rails.application.routes.draw do
 
   scope :accounts do
     get "/page_views", to: "accounts#page_views"
+    get "/assignment_analytics", to: "accounts#assignment_analytics"
+    get "/courses", to: "accounts#courses"
   end
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 

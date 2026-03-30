@@ -26,9 +26,7 @@ class AccountsController < ApplicationController
         controller: pv["controller"],
         action: pv["action"],
         interaction_seconds: pv["interaction_seconds"],
-        created_at: Time.parse(pv["created_at"])
-                        .in_time_zone("Asia/Kolkata")
-                        .strftime("%d %b %Y, %I:%M %p IST"),
+        created_at: pv["created_at"],
         participated: pv["participated"],
         contributed: pv["contributed"],
         summarized: pv["summarized"],
@@ -42,34 +40,35 @@ class AccountsController < ApplicationController
     render json: {
       data: data,
       current_page: page,
-      has_next: data.length == 10,  # simple check
+      has_next: data.length == 10,
       has_prev: page > 1
     }
   end
 
-  def grade_history
-    return render json: [] if params[:user_id].blank?
-
+  def assignment_analytics
     course_id = params[:course_id]
+    user_id = params[:user_id]
 
-    service = CanvasApiService.new
-    history = service.fetch_grade_history(course_id)
-
-    user_history = history.select { |h| h["user_id"].to_s == params[:user_id].to_s }
-
-    data = user_history.map do |h|
-      {
-        assignment_name: h["assignment_name"],
-        course_name: "Course #{course_id}", # or fetch real name if needed
-        score: h["score"],
-        grade: h["grade"],
-        grader: h["grader"],
-        graded_at: Time.parse(h["graded_at"])
-                        .in_time_zone("Asia/Kolkata")
-                        .strftime("%d %b %Y, %I:%M %p IST")
+    response = HTTParty.get(
+      "#{ENV['CANVAS_BASE_URL']}/api/v1/courses/#{course_id}/analytics/users/#{user_id}/assignments",
+      headers: {
+        "Authorization" => "Bearer #{ENV['CANVAS_API_TOKEN']}"
       }
-    end
+    )
 
-    render json: data
+    render json: JSON.parse(response.body)
+  end
+
+  def courses
+    account_id = params[:user_id]
+
+    response = HTTParty.get(
+      "#{ENV['CANVAS_BASE_URL']}/api/v1/accounts/#{account_id}/courses",
+      headers: {
+        "Authorization" => "Bearer #{ENV['CANVAS_API_TOKEN']}"
+      }
+    )
+
+    render json: JSON.parse(response.body)
   end
 end
