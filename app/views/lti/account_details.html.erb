@@ -140,6 +140,12 @@
   .time-col {
     width: 180px !important;
   }
+
+  .chart-wrapper {
+    position: relative;
+    height: 300px;   /* ✅ FIXED HEIGHT */
+    width: 100%;
+  }
 </style>
 
 <div class="layout-container">
@@ -162,37 +168,35 @@
           <% end %>
         </select>
 
+        <select id="page_course_select" class="select-field">
+          <option value="">Select Course</option>
+        </select>
+
         <button id="export_btn" class="btn-export">Export</button>
       </div>
 
-      <div class="table-wrapper">
-        <table class="data-table wide-table">
-          <thead>
-            <tr>
-              <th>Course Name</th>
-              <th>Context</th>
-              <th>Page</th>
-              <th class="url-col">URL</th>
-              <th>Action</th>
-              <th class="small-col">Interaction (sec)</th>
-              <th class="time-col">Visited Time</th>
-              <th class="small-col">Participated</th>
-              <th class="small-col">Contributed</th>
-              <th>Render Time(sec )</th>
-            </tr>
-          </thead>
-          <tbody id="page_views_table">
-            <tr>
-              <td colspan="6">Select a user</td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="card-container" style="margin-top:20px;">
+        <div class="card-header">
+          <h3>Overall Page Views</h3>
+        </div>
+
+        <div class="card-body">
+          <div class="chart-wrapper">
+            <canvas id="summaryChart"></canvas>
+          </div>
+        </div>
       </div>
 
-      <div id="pagination_controls">
-        <button id="prev_btn" class="btn-secondary" disabled>Prev</button>
-        <span id="page_info">Page 1</span>
-        <button id="next_btn" class="btn-primary">Next</button>
+      <div class="card-container" style="margin-top:20px;">
+        <div class="card-header">
+          <h3>Last Week Page Views</h3>
+        </div>
+
+        <div class="card-body">
+          <div class="chart-wrapper">
+            <canvas id="pageViewWeeklyChart"></canvas>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -247,9 +251,6 @@
           </tbody>
         </table>
       </div>
-      <div id="graph_container" style="display:none; height:400px;">
-        <canvas id="pageViewChart"></canvas>
-      </div>
 
     </div>
   </div>
@@ -261,154 +262,41 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
-
-  $('#export_btn').on('click', function () {
-
-    let pageTable = document.querySelector("#page_views_table");
-    let pageHeaders = document.querySelectorAll(".data-table thead tr th");
-
-    let pageData = [];
-
-    let headerRow = [];
-    pageHeaders.forEach(th => headerRow.push(th.innerText.trim()));
-    pageData.push(headerRow);
-
-    pageTable.querySelectorAll("tr").forEach(row => {
-      let rowData = [];
-      row.querySelectorAll("td").forEach(td => {
-        rowData.push(td.innerText.trim());
-      });
-      if (rowData.length) pageData.push(rowData);
-    });
-
-    let gradeTable = document.querySelector("#grade_table");
-
-    let gradeHeaders = [
-      "Assignment",
-      "Course",
-      "Score",
-      "Grade",
-      "Grader",
-      "Graded At"
-    ];
-
-    let gradeData = [gradeHeaders];
-
-    gradeTable.querySelectorAll("tr").forEach(row => {
-      let rowData = [];
-      row.querySelectorAll("td").forEach(td => {
-        rowData.push(td.innerText.trim());
-      });
-      if (rowData.length) gradeData.push(rowData);
-    });
-
-    let wb = XLSX.utils.book_new();
-
-    let ws1 = XLSX.utils.aoa_to_sheet(pageData);
-    ws1['!cols'] = [
-      { wch: 45 }, // URL
-      { wch: 25 },
-      { wch: 20 },
-      { wch: 20 },
-      { wch: 20 },
-      { wch: 15 },
-      { wch: 25 },
-      { wch: 15 },
-      { wch: 15 },
-      { wch: 15 },
-      { wch: 20 },
-      { wch: 20 },
-      { wch: 30 },
-      { wch: 20 }
-    ];
-
-    XLSX.utils.book_append_sheet(wb, ws1, "Page Views");
-
-    let ws2 = XLSX.utils.aoa_to_sheet(gradeData);
-    ws2['!cols'] = [
-      { wch: 30 },
-      { wch: 25 },
-      { wch: 15 },
-      { wch: 15 },
-      { wch: 30 },
-      { wch: 25 }
-    ];
-
-    XLSX.utils.book_append_sheet(wb, ws2, "Grade History");
-
-    XLSX.writeFile(wb, "canvas_report.xlsx");
-
-  });
-
-</script>
-
-<script>
-  let currentPage = 1;
-  let currentUserId = null;
-
-  $('#user_select').on('change', function () {
-    currentUserId = $(this).val();
-    currentPage = 1;
-
-    if (!currentUserId) return;
-
-    loadPage(currentPage);
-  });
-
-  $('#grade_user_select').on('change', function () {
-    const userId = $(this).val();
-
-    if (!userId) return;
-
-    $('#course_select').html('<option value="">Loading courses...</option>');
+  function loadWeeklyPageViews(courseId, userId) {
 
     $.ajax({
-      url: '/accounts/courses',   // backend endpoint
+      url: '/accounts/user_activity',
       method: 'GET',
-      data: { user_id: userId },
+      data: {
+        course_id: courseId,
+        user_id: userId
+      },
       headers: {
         "ngrok-skip-browser-warning": "true"
       },
 
-      success: function (data) {
+      success: function (res) {
 
-        let options = '<option value="">Select Course</option>';
-
-        $.each(data, function (i, course) {
-          options += `<option value="${course.id}">${course.name}</option>`;
-        });
-
-        $('#course_select').html(options);
+        if (!res.page_views) {
+          renderWeeklyChart([], []);
+        } 
+        const weeklyData = processLast7Days(res.page_views);
+        renderWeeklyChart(weeklyData.labels, weeklyData.values);
       },
 
       error: function () {
-        $('#course_select').html('<option>Error loading courses</option>');
+        console.error("Error loading activity");
       }
     });
-  });
+  }
 
-  $('#next_btn').on('click', function () {
-    currentPage += 1;
-    loadPage(currentPage);
-  });
-
-  $('#prev_btn').on('click', function () {
-    if (currentPage > 1) {
-      currentPage -= 1;
-      loadPage(currentPage);
-    }
-  });
-
-  function loadPage(page) {
-
-    $('#page_views_table').html('<tr><td colspan="4">Loading...</td></tr>');
+  function loadPage() {
 
     $.ajax({
       url: '/accounts/page_views',
       method: 'GET',
       data: {
-        user_id: currentUserId,
-        page: page
+        user_id: currentUserId
       },
       headers: {
         "ngrok-skip-browser-warning": "true"
@@ -419,11 +307,24 @@
         let data = res.data || [];
 
         if (data.length === 0) {
-          $('#page_views_table').html('<tr><td colspan="4">No data found</td></tr>');
+          alert("No data found");
           return;
         }
 
-        let rows = '';
+        let excelData = [];
+
+        excelData.push([
+          "Course Name",
+          "Context",
+          "Page",
+          "URL",
+          "Action",
+          "Interaction (sec)",
+          "Visited Time",
+          "Participated",
+          "Contributed",
+          "Render Time (sec)"
+        ]);
 
         $.each(data, function (i, pv) {
 
@@ -445,28 +346,26 @@
             ? (parseFloat(pv.render_time)).toFixed(3)
             : '0.000';
 
-          rows += `
-            <tr>
-              <td>${pv.course_name || '-'}</td>
-              <td>${pv.context_type || ''}</td>
-              <td>${pv.controller || ''}</td>
-              <td class="url-col">${pv.url || ''}</td>
-              <td>${pv.action || ''}</td>
-              <td class="small-col">${pv.interaction_seconds || 0}</td>
-              <td class="time-col">${visitedTime}</td>
-              <td class="small-col">${pv.participated ? 'Yes' : 'No'}</td>
-              <td class="small-col">${pv.contributed ? 'Yes' : 'No'}</td>
-              <td>${renderTime}</td>
-            </tr>
-          `;
+          excelData.push([
+            pv.course_name || '-',
+            pv.context_type || '',
+            pv.controller || '',
+            pv.url || '',
+            pv.action || '',
+            pv.interaction_seconds || 0,
+            visitedTime,
+            pv.participated ? 'Yes' : 'No',
+            pv.contributed ? 'Yes' : 'No',
+            renderTime
+          ]);
         });
 
-        $('#page_views_table').html(rows);
+        const ws = XLSX.utils.aoa_to_sheet(excelData);
+        const wb = XLSX.utils.book_new();
 
-        $('#page_info').text(`Page ${res.current_page}`);
+        XLSX.utils.book_append_sheet(wb, ws, "Page Views");
 
-        $('#prev_btn').prop('disabled', !res.has_prev);
-        $('#next_btn').prop('disabled', !res.has_next);
+        XLSX.writeFile(wb, "page_views.xlsx");
       },
 
       error: function () {
@@ -520,6 +419,246 @@
       }
     });
   }
+
+  function processLast7Days(pageViews) {
+
+    let labels = [];
+    let values = [];
+
+    const today = new Date();
+
+    const startDate = new Date();
+    startDate.setDate(today.getDate() - 7);
+
+    for (let i = 0; i < 7; i++) {
+
+      let d = new Date(startDate);
+      d.setDate(startDate.getDate() + i);
+
+      let dayLabel = d.toLocaleDateString('en-US', { weekday: 'short' });
+
+      labels.push(dayLabel);
+
+      let count = 0;
+
+      Object.keys(pageViews).forEach(ts => {
+        let date = new Date(ts);
+
+        if (
+          date.getDate() === d.getDate() &&
+          date.getMonth() === d.getMonth() &&
+          date.getFullYear() === d.getFullYear()
+        ) {
+          count += pageViews[ts];
+        }
+      });
+
+      values.push(count);
+    }
+
+    return { labels, values };
+  }
+
+  let weeklyChartInstance = null;
+
+  function renderWeeklyChart(labels, data) {
+
+    const ctx = document.getElementById("pageViewWeeklyChart").getContext("2d");
+
+    if (weeklyChartInstance) {
+      weeklyChartInstance.destroy();
+    }
+
+    weeklyChartInstance = new Chart(ctx, {
+      type: 'line', 
+
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Page Views',
+          data: data,
+          fill: true,   // ✅ makes it AREA
+          tension: 0.3
+        }]
+      },
+
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,  
+
+        plugins: {
+          legend: {
+            display: true
+          }
+        },
+
+        scales: {
+          x: {
+            title: {
+              display: true,
+              text: 'Days'
+            }
+          },
+          y: {
+            beginAtZero: true,
+            title: {
+              display: true,
+              text: 'Page Views Count'
+            }
+          }
+        }
+      }
+    });
+  }
+</script>
+
+<script>
+  let summaryChart = null;
+
+  function renderSummaryChart(labels, data) {
+
+    const ctx = document.getElementById("summaryChart").getContext("2d");
+
+    if (summaryChart) {
+      summaryChart.destroy();
+    }
+
+    summaryChart = new Chart(ctx, {
+      type: "bar",
+
+      data: {
+        labels: labels,
+        datasets: [{
+          label: "Views",
+          data: data,
+          borderWidth: 1
+        }]
+      },
+
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+
+        scales: {
+          y: {
+            beginAtZero: true
+          }
+        }
+      }
+    });
+  }
+</script>
+
+<script>
+  let currentPage = 1;
+  let currentUserId = null;
+
+  $('#export_btn').on('click', function () {
+    currentUserId = $('#user_select').val();
+
+    if (!currentUserId) return;
+
+    loadPage();
+  });
+
+  $('#user_select').on('change', function () {
+    const userId = $(this).val();
+
+    if (!userId) return;
+
+    $('#page_course_select').html('<option value="">Loading courses...</option>');
+
+    $.ajax({
+      url: '/accounts/courses',   
+      method: 'GET',
+      data: { user_id: userId },
+      headers: {
+        "ngrok-skip-browser-warning": "true"
+      },
+
+      success: function (res) {
+        let data = res.courses;
+
+        let options = '<option value="">Select Course</option>';
+
+        $.each(data, function (i, course) {
+          options += `<option value="${course.id}">${course.name}</option>`;
+        });
+
+        $('#page_course_select').html(options);
+
+        const summary = res.summary || {};
+
+        const labels = [
+          "Courses",
+          "Pages",
+          "Assignments",
+          "Discussions",
+          "Gradebook",
+          "Calendar",
+          "Accounts"
+        ];
+
+        const values = [
+          summary.courses || 0,
+          summary.pages || 0,
+          summary.assignments || 0,
+          summary.discussions || 0,
+          summary.gradebook || 0,
+          summary.calendar || 0,
+          summary.accounts || 0
+        ];
+
+        renderSummaryChart(labels, values);
+      },
+
+      error: function () {
+        $('#page_course_select').html('<option>Error loading courses</option>');
+      }
+    });
+  });
+
+  $('#grade_user_select').on('change', function () {
+    const userId = $(this).val();
+
+    if (!userId) return;
+
+    $('#course_select').html('<option value="">Loading courses...</option>');
+
+    $.ajax({
+      url: '/accounts/courses',   
+      method: 'GET',
+      data: { user_id: userId },
+      headers: {
+        "ngrok-skip-browser-warning": "true"
+      },
+
+      success: function (data) {
+
+        let options = '<option value="">Select Course</option>';
+
+        $.each(data, function (i, course) {
+          options += `<option value="${course.id}">${course.name}</option>`;
+        });
+
+        $('#course_select').html(options);
+      },
+
+      error: function () {
+        $('#course_select').html('<option>Error loading courses</option>');
+      }
+    });
+  });
+
+  $('#page_course_select').on('change', function () {
+
+    const courseId = $(this).val();
+    const userId = $('#user_select').val();
+
+    if (!courseId || !userId) return;
+
+    loadWeeklyPageViews(courseId, userId);
+  });
 
   $('#course_select').on('change', function () {
     const courseId = $(this).val();
@@ -577,7 +716,6 @@
 
         data.forEach(a => {
 
-          // skip invalid records
           if (!a.title) return;
 
           labels.push(a.title);

@@ -21,13 +21,12 @@ class CanvasApiService
   end
 
 
-  def fetch_user_page_views(user_id, page = 1)
+  def fetch_user_page_views(user_id)
     response = HTTParty.get(
       "#{@base_url}/api/v1/users/#{user_id}/page_views",
       headers: @headers,
       query: {
-        per_page: 10,
-        page: page
+        per_page: 100
       }
     )
 

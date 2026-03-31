@@ -173,18 +173,7 @@ class LtiController < ApplicationController
       service = CanvasApiService.new
       users   = service.fetch_users(account_id)
 
-      # Filter params
-      search_id   = params[:user_id]
-      search_name = params[:name]
-
-      filtered_users = users.select do |user|
-        match_id = search_id.present? ? user["id"].to_s == search_id.to_s : true
-        match_name = search_name.present? ? user["name"].to_s.downcase.include?(search_name.downcase) : true
-
-        match_id && match_name
-      end
-
-      @users = filtered_users.map do |u|
+      @users = users.map do |u|
         {
           id: u["id"],
           name: u["name"]

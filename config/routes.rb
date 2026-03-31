@@ -9,6 +9,7 @@ Rails.application.routes.draw do
     get "/page_views", to: "accounts#page_views"
     get "/assignment_analytics", to: "accounts#assignment_analytics"
     get "/courses", to: "accounts#courses"
+    get "/user_activity", to: "accounts#user_activity"
   end
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 

@@ -6,11 +6,8 @@ class AccountsController < ApplicationController
   def page_views
     return render json: [] if params[:user_id].blank?
 
-    page = params[:page].to_i
-    page = 1 if page <= 0
-
     service = CanvasApiService.new
-    page_views = service.fetch_user_page_views(params[:user_id], page)
+    page_views = service.fetch_user_page_views(params[:user_id])
 
     data = page_views.map do |pv|
       course_name = nil
@@ -38,10 +35,7 @@ class AccountsController < ApplicationController
     end
 
     render json: {
-      data: data,
-      current_page: page,
-      has_next: data.length == 10,
-      has_prev: page > 1
+      data: data
     }
   end
 
@@ -69,6 +63,68 @@ class AccountsController < ApplicationController
       }
     )
 
-    render json: JSON.parse(response.body)
+    page_views_res = HTTParty.get(
+            "#{ENV['CANVAS_BASE_URL']}/api/v1/users/#{account_id}/page_views",
+            headers: {
+              "Authorization" => "Bearer #{ENV['CANVAS_API_TOKEN']}"
+            },
+            query: {
+              per_page: 100
+            }
+          )
+
+    page_views = JSON.parse(page_views_res.body)
+
+    allowed = [
+      "courses",
+      "page_views",
+      "accounts",
+      "discussion_topics",
+      "assignments",
+      "account_grading_settings",
+      "calendars"
+    ]
+
+    counts = Hash.new(0)
+
+    page_views.each do |pv|
+      ctrl = pv["controller"]
+      next unless allowed.include?(ctrl)
+
+      counts[ctrl] += 1
+    end
+
+    summary = {
+      courses: counts["courses"],
+      pages: counts["page_views"],
+      assignments: counts["assignments"],
+      discussions: counts["discussion_topics"],
+      gradebook: counts["account_grading_settings"],
+      calendar: counts["calendars"],
+      accounts: counts["accounts"]
+    }
+
+    render json: {
+      courses: JSON.parse(response.body),
+      summary: summary
+    }
+  end
+
+  def user_activity
+    course_id = params[:course_id]
+    user_id   = params[:user_id]
+
+    response = HTTParty.get(
+      "#{ENV['CANVAS_BASE_URL']}/api/v1/courses/#{course_id}/analytics/users/#{user_id}/activity",
+      headers: {
+        "Authorization" => "Bearer #{ENV['CANVAS_API_TOKEN']}"
+      }
+    )
+
+    activity_data = JSON.parse(response.body)
+
+    render json: {
+      page_views: activity_data["page_views"]
+    }
   end
 end
