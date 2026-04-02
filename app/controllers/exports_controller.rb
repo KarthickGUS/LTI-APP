@@ -3,76 +3,136 @@ require "axlsx"
 require "json"
 
 class ExportsController < ApplicationController
+  BATCH_SIZE = 500
   def export_course
-      base_url = ENV["CANVAS_BASE_URL"]
-      token = ENV["CANVAS_API_TOKEN"]
+    base_url = ENV["LCCA_URL"]
+    token = ENV["LCCA_TOKEN"]
 
-      headers = {
-        "Authorization" => "Bearer #{token}"
-      }
+    headers = {
+      "Authorization" => "Bearer #{token}"
+    }
 
-      start_id = read_progress
-      puts "Starting from Course ID: #{start_id}"
+    courses = JSON.parse(File.read(course_ids_file))
 
-      (8050..8493).each do |course_id|
-        puts "Processing Course ID: #{course_id}"
+    start_index = read_batch_progress
+    end_index = [ start_index + BATCH_SIZE - 1, courses.size - 1 ].min
 
-        course = HTTParty.get(
-          "#{base_url}/api/v1/courses/#{course_id}",
-          headers: headers
-        ).parsed_response
+    puts "Processing batch: #{start_index} → #{end_index}"
 
-        if course.is_a?(Hash) && course["errors"]
-          puts "Skipping Course #{course_id}"
-          next
-        end
+    (start_index..end_index).each do |i|
+      c = courses[i]
+      course_id = c["course_id"]
+      course_name = c["course_name"]
 
-        course_name = course["name"]
+      puts "Processing Course ID: #{course_id}"
 
-        groups = HTTParty.get(
-          "#{base_url}/api/v1/courses/#{course_id}/assignment_groups",
-          headers: headers
-        ).parsed_response
+      # 🔹 Groups
+      groups = HTTParty.get(
+        "#{base_url}/api/v1/courses/#{course_id}/assignment_groups",
+        headers: headers
+      ).parsed_response
 
-        group_map = groups.each_with_object({}) do |g, map|
-          map[g["id"]] = {
-            name: g["name"],
-            weight: g["group_weight"]
-          }
-        end
-
-        assignments = HTTParty.get(
-          "#{base_url}/api/v1/courses/#{course_id}/assignments",
-          headers: headers
-        ).parsed_response
-
-        assignments.each do |a|
-          group = group_map[a["assignment_group_id"]] || {}
-          record = {
-            course_id: course_id,
-            course_name: course_name,
-            assignment_group_id: a["assignment_group_id"],
-            assignment_group_name: group[:name],
-            weightage: group[:weight],
-            assignment_id: a["id"],
-            assignment_name: a["name"],
-            created_date: format_utc(a["created_at"]),
-            start_date: format_utc(a["unlock_at"]),
-            due_date: format_utc(a["due_at"]),
-            submission_type: (a["submission_types"] || []).join(", ")
-          }
-
-          append_to_json(record)
-        end
-
-        puts "✅ Completed Course #{course_id}"
-
-        save_progress(course_id)
+      group_map = groups.each_with_object({}) do |g, map|
+        map[g["id"]] = {
+          name: g["name"],
+          weight: g["group_weight"]
+        }
       end
 
-    puts "🎉 JSON Export Completed"
+      # 🔹 Assignments
+      assignments = HTTParty.get(
+        "#{base_url}/api/v1/courses/#{course_id}/assignments",
+        headers: headers
+      ).parsed_response
 
-    render json: { message: "Export completed successfully" }
+      assignments.each do |a|
+        group = group_map[a["assignment_group_id"]] || {}
+
+        record = {
+          course_id: course_id,
+          course_name: course_name,
+          assignment_group_id: a["assignment_group_id"],
+          assignment_group_name: group[:name],
+          weightage: group[:weight],
+          assignment_id: a["id"],
+          assignment_name: a["name"],
+          submission_type: (a["submission_types"] || []).join(", "),
+          created_date: format_utc(a["created_at"]),
+          start_date: format_utc(a["unlock_at"]),
+          due_date: format_utc(a["due_at"])
+        }
+
+        append_to_json(record)
+      end
+
+      puts "✅ Completed Course #{course_id}"
+    end
+
+    # ✅ Save next batch start
+    save_batch_progress(end_index + 1)
+
+    puts "🎯 Batch Completed"
+
+    render json: {
+      message: "Batch completed",
+      next_start_index: end_index + 1
+    }
+
+  rescue => e
+    puts "❌ ERROR: #{e.message}"
+    render json: { error: e.message }, status: 500
+  end
+
+  def export_course_ids
+    base_url = ENV["CANVAS_BASE_URL"]
+    token = ENV["CANVAS_API_TOKEN"]
+
+    headers = {
+      "Authorization" => "Bearer #{token}"
+    }
+
+    all_courses = []
+
+    (1..2).each do |page|
+      puts "Fetching page #{page}"
+
+      response = HTTParty.get(
+        "#{base_url}/api/v1/accounts/1/courses",
+        headers: headers,
+        query: {
+          per_page: 100,
+          page: page
+        }
+      )
+
+      courses = response.parsed_response
+
+      next unless courses.is_a?(Array)
+
+      available_courses = courses.select do |c|
+        c["workflow_state"] == "available"
+      end
+
+      formatted = available_courses.map do |c|
+        {
+          course_id: c["id"],
+          course_name: c["name"]
+        }
+      end
+
+      all_courses.concat(formatted)
+
+      puts "Page #{page} → #{formatted.size} available courses"
+    end
+
+    File.write(course_ids_file, all_courses.to_json)
+
+    puts "🎉 Total Available Courses: #{all_courses.size}"
+
+    render json: {
+      message: "Course IDs exported successfully",
+      total_available_courses: all_courses.size
+    }
 
   rescue => e
     puts "❌ ERROR: #{e.message}"
@@ -80,6 +140,10 @@ class ExportsController < ApplicationController
   end
 
   private
+
+    def course_ids_file
+      Rails.root.join("tmp", "course_ids.json")
+    end
 
     def format_utc(date)
       return "" unless date
@@ -111,5 +175,22 @@ class ExportsController < ApplicationController
 
   def json_file
     Rails.root.join("tmp", "export_data.json")
+  end
+
+  def batch_progress_file
+    Rails.root.join("tmp", "batch_progress.json")
+  end
+
+  def read_batch_progress
+    return 0 unless File.exist?(batch_progress_file)
+
+    data = JSON.parse(File.read(batch_progress_file))
+    data["last_index"].to_i
+  end
+
+  def save_batch_progress(index)
+    File.write(batch_progress_file, {
+      last_index: index
+    }.to_json)
   end
 end

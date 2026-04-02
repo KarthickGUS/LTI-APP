@@ -72,6 +72,6 @@ Rails.application.configure do
   ENV["CANVAS_API_TOKEN"] = "2nm9Xxm4PVyY43BUntTvC2ZcUhM2U8nKaM3EGve77uYwDcw94wYW8LXYJcMvAeYB"
   ENV["CANVAS_BASE_URL"] = "http://localhost:3000/"
 
-  ENV["LCCA_TOKEN"] = "pLbu7IyQxv1TPhvdki2FAP9MQU3FETlRDRb7onB0Nph2iQcpS1kepRXTorEPpp1Z"
+  ENV["LCCA_TOKEN"] = "msEIOsOIsNne7SFqj5sxYvvwqTUbtjrNNQVsZfyyk1aue65OgkSH7Fu30QBuFSgN"
   ENV["LCCA_URL"] = "https://study.lcca.org.uk/"
 end
