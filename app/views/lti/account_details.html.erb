@@ -224,14 +224,14 @@
           <option value="">Select Course</option>
         </select>
 
-      <button id="graph_btn" class="btn-primary" style="margin-left:10px;">
+      <button id="graph_btn" class="btn-primary" style="margin-left:10px; display: none">
         📊 View Graph
       </button>
 
         <button id="export_btn" class="btn-export">Export</button>
       </div>
 
-      <div class="table-wrapper" id="table_views">
+      <div class="table-wrapper" id="table_views" style="display: none;">
         <table class="data-table">
         <thead>
           <tr>
@@ -250,6 +250,18 @@
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <div class="card-container" style="margin-top:20px;">
+        <div class="card-header">
+          <h3>Student Grade Views</h3>
+        </div>
+
+        <div class="card-body">
+          <div class="chart-wrapper">
+            <canvas id="gradeChart"></canvas>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -276,13 +288,13 @@
       },
 
       success: function (res) {
+        debugger;
 
         if (!res.page_views) {
           renderWeeklyChart([], []);
         } 
         const weeklyData = processLast7Days(res.page_views);
-        renderWeeklyChart(weeklyData.labels, weeklyData.values);
-      },
+        renderWeeklyChart(weeklyData.labels, weeklyData.values);      },
 
       error: function () {
         console.error("Error loading activity");
@@ -374,10 +386,16 @@
     });
   }
   
+  let gradeChartInstance = null;
+
   function loadAssignmentAnalytics(courseId) {
 
-    $('#grade_table').html('<tr><td colspan="7">Loading...</td></tr>');
     const userId = $('#grade_user_select').val();
+
+    if (!userId) {
+      alert("Select a user");
+      return;
+    }
 
     $.ajax({
       url: '/accounts/assignment_analytics',
@@ -389,46 +407,63 @@
 
       success: function (data) {
 
-        if (!data || data.length === 0) {
-          $('#grade_table').html('<tr><td colspan="7">No data found</td></tr>');
+        console.log("Grade API:", data);
+
+        // Handle response safety
+        let assignments = data;
+
+        if (typeof data === "string") {
+          assignments = JSON.parse(data);
+        }
+
+        if (!Array.isArray(assignments)) {
+          assignments = assignments.data || [];
+        }
+
+        if (!assignments || assignments.length === 0) {
+          alert("No data found");
           return;
         }
 
-        let rows = '';
+        const labels = [];
+        const scores = [];
 
-        $.each(data, function (i, a) {
+        assignments.forEach(a => {
+          const score = a.submission?.score || 0;
+          const max = a.points_possible || a.max_score || 0;
 
-          rows += `
-            <tr>
-              <td>${a.title || ''}</td>
-              <td>${a.points_possible || 0}</td>
-              <td>${a.max_score || 0}</td>
-              <td>${a.min_score || 0}</td>
-              <td>${a.median || 0}</td>
-              <td>${a.submission?.score || 0}</td>
-              <td>${a.status || '-'}</td>
-            </tr>
-          `;
+          let percentage = 0;
+
+          if (max > 0) {
+            percentage = (score / max) * 100;
+          }
+
+          labels.push(a.title || "Untitled");
+          scores.push(percentage.toFixed(2));
         });
 
-        $('#grade_table').html(rows);
+        renderGradeChart(labels, scores);
       },
 
       error: function () {
-        $('#grade_table').html('<tr><td colspan="7">Error loading data</td></tr>');
+        alert("Error loading data");
       }
     });
   }
 
   function processLast7Days(pageViews) {
 
+    if (!pageViews || typeof pageViews !== "object") {
+      console.error("Invalid pageViews:", pageViews);
+      return { labels: [], values: [] };
+    }
+
     let labels = [];
     let values = [];
 
     const today = new Date();
-
     const startDate = new Date();
-    startDate.setDate(today.getDate() - 7);
+    startDate.setDate(today.getDate() - 6); 
 
     for (let i = 0; i < 7; i++) {
 
@@ -436,22 +471,11 @@
       d.setDate(startDate.getDate() + i);
 
       let dayLabel = d.toLocaleDateString('en-US', { weekday: 'short' });
-
       labels.push(dayLabel);
 
-      let count = 0;
+      let key = d.toISOString().split('T')[0]; // ✅ "YYYY-MM-DD"
 
-      Object.keys(pageViews).forEach(ts => {
-        let date = new Date(ts);
-
-        if (
-          date.getDate() === d.getDate() &&
-          date.getMonth() === d.getMonth() &&
-          date.getFullYear() === d.getFullYear()
-        ) {
-          count += pageViews[ts];
-        }
-      });
+      let count = pageViews[key] || 0;
 
       values.push(count);
     }
@@ -510,6 +534,51 @@
       }
     });
   }
+
+  function renderGradeChart(labels, scores) {
+
+    const ctx = document.getElementById("gradeChart").getContext("2d");
+
+    if (gradeChartInstance) {
+      gradeChartInstance.destroy();
+    }
+
+    gradeChartInstance = new Chart(ctx, {
+      type: "bar", 
+      data: {
+        labels: labels,
+        datasets: [{
+          label: "Score (%)",
+          data: scores,
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: {
+            display: true
+          }
+        },
+        scales: {
+          x: {
+            title: {
+              display: true,
+              text: "Assignments"
+            }
+          },
+        y: {
+          title: {
+            display: true,
+            text: "Percentage (%)"
+          },
+          beginAtZero: true,
+          max: 100
+        }
+        }
+      }
+    });
+  }
 </script>
 
 <script>
@@ -554,12 +623,56 @@
   let currentUserId = null;
 
   $('#export_btn').on('click', function () {
+
+    // ❌ OLD LOGIC (commented)
+    /*
     currentUserId = $('#user_select').val();
-
     if (!currentUserId) return;
-
     loadPage();
+    */
+
+    $.ajax({
+      url: '/export_course',
+      method: 'GET',
+      dataType: 'json',   // EXPECT JSON
+      headers: {
+        "ngrok-skip-browser-warning": "true"
+      },
+      success: function (data) {
+
+        console.log("API DATA:", data);
+        
+        const formattedData = data.map(row => ({
+          "Course ID": row.course_id,
+          "Course Name": row.course_name,
+          "Assignment Group ID": row.assignment_group_id,
+          "Assignment Group Name": row.assignment_group_name,
+          "Assignment ID": row.assignment_id,
+          "Assignment Name": row.assignment_name,
+          "Created Date": row.created_date,
+          "Start Date": row.start_date,
+          "Due Date": row.due_date
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(formattedData);
+        const workbook = XLSX.utils.book_new();
+
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Canvas Export");
+
+        XLSX.writeFile(workbook, "canvas_export.xlsx");
+      },
+      error: function (xhr) {
+        console.error("Error:", xhr.responseText);
+        alert("Export failed");
+      }
+    });
+
   });
+
+  function formatDate(date) {
+    if (!date) return '';
+    return new Date(date).toLocaleString();
+  }
 
   $('#user_select').on('change', function () {
     const userId = $(this).val();
@@ -633,7 +746,9 @@
         "ngrok-skip-browser-warning": "true"
       },
 
-      success: function (data) {
+      success: function (res) {
+
+        let data = res.courses;
 
         let options = '<option value="">Select Course</option>';
 

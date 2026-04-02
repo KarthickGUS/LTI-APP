@@ -76,6 +76,10 @@ GEM
       public_suffix (>= 2.0.2, < 8.0)
     aes_key_wrap (1.1.0)
     ast (2.4.3)
+    axlsx (1.1.7)
+      nokogiri (>= 1.4.1)
+      rake (>= 0.8.7)
+      rubyzip (>= 0.9.5)
     base64 (0.3.0)
     bcrypt_pbkdf (1.1.2)
     benchmark (0.5.0)
@@ -425,6 +429,7 @@ PLATFORMS
   x86_64-linux-musl
 
 DEPENDENCIES
+  axlsx
   bootsnap
   brakeman
   capybara
@@ -469,6 +474,7 @@ CHECKSUMS
   addressable (2.8.9) sha256=cc154fcbe689711808a43601dee7b980238ce54368d23e127421753e46895485
   aes_key_wrap (1.1.0) sha256=b935f4756b37375895db45669e79dfcdc0f7901e12d4e08974d5540c8e0776a5
   ast (2.4.3) sha256=954615157c1d6a382bc27d690d973195e79db7f55e9765ac7c481c60bdb4d383
+  axlsx (1.1.7) sha256=f78e41ac08bfc3464b7ccabb5849d4de6572ab754792aaef1d6fc3ea87eedf26
   base64 (0.3.0) sha256=27337aeabad6ffae05c265c450490628ef3ebd4b67be58257393227588f5a97b
   bcrypt_pbkdf (1.1.2) sha256=c2414c23ce66869b3eb9f643d6a3374d8322dfb5078125c82792304c10b94cf6
   benchmark (0.5.0) sha256=465df122341aedcb81a2a24b4d3bd19b6c67c1530713fd533f3ff034e419236c
