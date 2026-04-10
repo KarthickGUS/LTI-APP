@@ -32,6 +32,7 @@ class ExportsController < ApplicationController
         headers: headers
       ).parsed_response
 
+
       group_map = groups.each_with_object({}) do |g, map|
         map[g["id"]] = {
           name: g["name"],
@@ -45,30 +46,33 @@ class ExportsController < ApplicationController
         headers: headers
       ).parsed_response
 
-      assignments.each do |a|
-        group = group_map[a["assignment_group_id"]] || {}
+    records = []
 
-        record = {
-          course_id: course_id,
-          course_name: course_name,
-          assignment_group_id: a["assignment_group_id"],
-          assignment_group_name: group[:name],
-          weightage: group[:weight],
-          assignment_id: a["id"],
-          assignment_name: a["name"],
-          submission_type: (a["submission_types"] || []).join(", "),
-          created_date: format_utc(a["created_at"]),
-          start_date: format_utc(a["unlock_at"]),
-          due_date: format_utc(a["due_at"])
-        }
+    assignments.each do |a|
+      next unless a.is_a?(Hash)
 
-        append_to_json(record)
-      end
+      group = group_map[a["assignment_group_id"]] || {}
+
+      records << {
+        course_id: course_id,
+        course_name: course_name,
+        assignment_group_id: a["assignment_group_id"],
+        assignment_group_name: group[:name],
+        weightage: group[:weight],
+        assignment_id: a["id"],
+        assignment_name: a["name"],
+        submission_type: (a["submission_types"] || []).join(", "),
+        created_date: format_utc(a["created_at"]),
+        start_date: format_utc(a["unlock_at"]),
+        due_date: format_utc(a["due_at"])
+      }
+    end
+
+    append_bulk_to_json(records)
 
       puts "✅ Completed Course #{course_id}"
     end
 
-    # ✅ Save next batch start
     save_batch_progress(end_index + 1)
 
     puts "🎯 Batch Completed"
@@ -139,6 +143,60 @@ class ExportsController < ApplicationController
     render json: { error: e.message }, status: 500
   end
 
+  def convert_json_to_excel
+    json_file = Rails.root.join("tmp", "export_data.json")
+    output_file = Rails.root.join("tmp", "final_export.xlsx")
+
+    package = Axlsx::Package.new
+    workbook = package.workbook
+
+    workbook.add_worksheet(name: "Courses") do |sheet|
+      # ✅ Headers (Humanized + Submission Type LAST)
+      sheet.add_row [
+        "Course Id",
+        "Course Name",
+        "Assignment Group Id",
+        "Assignment Group Name",
+        "Weightage",
+        "Assignment Id",
+        "Assignment Name",
+        "Created Date",
+        "Start Date",
+        "Due Date",
+        "Submission Type"
+      ]
+
+      # ✅ Read JSON line by line
+      File.foreach(json_file) do |line|
+        row = JSON.parse(line)
+
+        sheet.add_row [
+          row["course_id"],
+          row["course_name"],
+          row["assignment_group_id"],
+          row["assignment_group_name"],
+          row["weightage"],
+          row["assignment_id"],
+          row["assignment_name"],
+          row["created_date"],
+          row["start_date"],
+          row["due_date"],
+          row["submission_type"]  # 👈 moved to last
+        ]
+      end
+    end
+
+    package.serialize(output_file)
+
+    puts "🎉 Excel created at: #{output_file}"
+
+    render json: { message: "Excel created successfully" }
+
+  rescue => e
+    puts "❌ ERROR: #{e.message}"
+    render json: { error: e.message }, status: 500
+  end
+
   private
 
     def course_ids_file
@@ -167,9 +225,11 @@ class ExportsController < ApplicationController
       }.to_json)
     end
 
-  def append_to_json(record)
+  def append_bulk_to_json(records)
     File.open(json_file, "a") do |f|
-      f.puts(record.to_json)
+      records.each do |r|
+        f.puts(r.to_json)
+      end
     end
   end
 

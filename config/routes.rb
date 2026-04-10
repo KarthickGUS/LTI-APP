@@ -18,6 +18,8 @@ Rails.application.routes.draw do
   get "up" => "rails/health#show", as: :rails_health_check
   get "export_course", to: "exports#export_course"
   get "export_course_ids", to: "exports#export_course_ids"
+  get "convert_json_to_excel", to: "exports#convert_json_to_excel"
+
 
   # Render dynamic PWA files from app/views/pwa/* (remember to link manifest in application.html.erb)
   # get "manifest" => "rails/pwa#manifest", as: :pwa_manifest
