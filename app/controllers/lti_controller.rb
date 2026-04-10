@@ -12,7 +12,7 @@ class LtiController < ApplicationController
     session[:lti_state] = state
     session[:lti_nonce] = nonce
 
-    auth_url = "http://localhost:3000/api/lti/authorize_redirect"
+    auth_url = "#{ENV["BASE_NGROK_URL"]}/api/lti/authorize_redirect"
 
     query = {
       response_type: "id_token",

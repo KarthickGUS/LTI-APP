@@ -74,4 +74,5 @@ Rails.application.configure do
 
   ENV["LCCA_TOKEN"] = "LvDp2oSfTPOVEIRj7zXBjeA12ZTTts3gpfxKGMcRhONwVoxo533T0ERenTtXXUnI"
   ENV["LCCA_URL"] = "https://study.lcca.org.uk/"
+  ENV["BASE_NGROK_URL"] = "https://stinging-scarecrow-urgent.ngrok-free.dev"
 end
