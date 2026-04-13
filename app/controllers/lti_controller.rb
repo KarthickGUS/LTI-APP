@@ -12,7 +12,7 @@ class LtiController < ApplicationController
     session[:lti_state] = state
     session[:lti_nonce] = nonce
 
-    auth_url = "#{ENV["BASE_NGROK_URL"]}/api/lti/authorize_redirect"
+    auth_url = "#{issuer}/api/lti/authorize_redirect"
 
     query = {
       response_type: "id_token",
@@ -188,32 +188,6 @@ class LtiController < ApplicationController
 
 private
 
-  def get_canvas_access_token(decoded_token)
-    token_url = "http://localhost:3000/login/oauth2/token"
-
-    response = HTTParty.post(token_url, body: {
-      grant_type: "client_credentials",
-      client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-      client_assertion: generate_client_assertion(decoded_token),
-      scope: [
-          "https://purl.imsglobal.org/spec/lti-ags/scope/lineitem",
-          "https://purl.imsglobal.org/spec/lti-ags/scope/result.readonly",
-          "https://purl.imsglobal.org/spec/lti-nrps/scope/contextmembership.readonly"
-        ].join(" ")
-    })
-    JSON.parse(response.body)["access_token"]
-  end
-
-
-  def get_courses(access_token)
-    HTTParty.get(
-      "http://localhost:3000/api/v1/users/self/courses",
-      headers: {
-        "Cookie" => request.headers["Cookie"]
-      }
-    )
-  end
-
   def decode_lti_token(id_token)
     unverified = JWT.decode(id_token, nil, false)
     header = unverified[1]
@@ -243,22 +217,6 @@ private
     )
 
     decoded.first
-  end
-
-  def generate_client_assertion(decoded_token)
-    client_id = decoded_token["aud"]
-    payload = {
-      iss: client_id,
-      sub: client_id,
-      aud: "http://localhost:3000/login/oauth2/token",
-      iat: Time.now.to_i,
-      exp: Time.now.to_i + 300,
-      jti: SecureRandom.uuid
-    }
-
-    private_key = OpenSSL::PKey::RSA.new(File.read("config/keys/private.key"))
-
-    JWT.encode(payload, private_key, "RS256", kid: "ai-assistant-key")
   end
 
   def extract_account_id(decoded_token)
