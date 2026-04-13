@@ -12,7 +12,7 @@ class LtiController < ApplicationController
     session[:lti_state] = state
     session[:lti_nonce] = nonce
 
-    auth_url = "#{issuer}/api/lti/authorize_redirect"
+    auth_url = "#{ENV['CANVAS_BASE_URL']}/api/lti/authorize_redirect"
 
     query = {
       response_type: "id_token",
@@ -69,88 +69,6 @@ class LtiController < ApplicationController
     end
   end
 
-  # def account_details
-  #   # 🔴 Handle LTI errors
-  #   if params[:error]
-  #     render plain: "LTI Error: #{params[:error_description]}"
-  #     return
-  #   end
-
-  #   # 🔴 Validate state
-  #   if params[:state] != session[:lti_state]
-  #     render plain: "Invalid state"
-  #     return
-  #   end
-
-  #   # 🔴 Decode LTI token
-  #   id_token = params[:id_token]
-  #   return render plain: "Missing id_token" if id_token.blank?
-
-  #   decoded_token = decode_lti_token(id_token)
-
-  #   # ==============================
-  #   # 🔵 STATIC ENV VALUES (HARDCODE)
-  #   # ==============================
-  #   canvas_url     = "http://localhost:3000"
-  #   client_id      = "10000000000003"
-  #   client_secret  = "6265f441-b9d2-48f4-bbd3-d462c855b28c"
-  #   redirect_uri   = "https://unefficacious-unflatteringly-hailey.ngrok-free.dev/lti/account_details"
-
-  #   # ==============================
-  #   # 🟡 STEP 1: If NO code → redirect to OAuth
-  #   # ==============================
-  #   if params[:code].blank?
-  #     oauth_url = "#{canvas_url}/login/oauth2/auth?" +
-  #       "client_id=#{client_id}" +
-  #       "&response_type=code" +
-  #       "&redirect_uri=#{redirect_uri}"
-  #     redirect_to oauth_url, allow_other_host: true
-  #     return
-  #   end
-
-  #   # ==============================
-  #   # 🟢 STEP 2: Exchange code → access token
-  #   # ==============================
-  #   response = HTTParty.post(
-  #     "#{canvas_url}/login/oauth2/token",
-  #     body: {
-  #       grant_type: "authorization_code",
-  #       client_id: client_id,
-  #       client_secret: client_secret,
-  #       redirect_uri: redirect_uri,
-  #       code: params[:code]
-  #     }
-  #   )
-
-  #   body = JSON.parse(response.body)
-
-  #   if body["error"]
-  #     render plain: "Token Error: #{body['error_description']}"
-  #     return
-  #   end
-
-  #   access_token = body["access_token"]
-
-  #   # ==============================
-  #   # 🟢 STEP 3: Call Canvas API
-  #   # ==============================
-  #   courses_response = HTTParty.get(
-  #     "#{canvas_url}/api/v1/users/self/courses",
-  #     headers: {
-  #       "Authorization" => "Bearer #{access_token}"
-  #     }
-  #   )
-
-  #   @courses = JSON.parse(courses_response.body)
-
-  #   # ==============================
-  #   # 🟢 STEP 4: Render View
-  #   # ==============================
-  #   render :courses
-  # end
-  #
-  #
-
   def account_details
     if params[:error]
       render plain: "LTI Error: #{params[:error_description]}"
@@ -195,7 +113,7 @@ private
     kid = header["kid"]
     iss = unverified[0]["iss"]
 
-    jwks_url = "#{iss}/api/lti/security/jwks"
+    jwks_url = "#{ENV['CANVAS_BASE_URL']}/api/lti/security/jwks"
 
     jwks = JSON.parse(Net::HTTP.get(URI(jwks_url)))
 

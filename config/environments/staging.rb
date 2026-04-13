@@ -1,13 +1,15 @@
 Rails.application.configure do
+  # Code loading
   config.cache_classes = true
   config.eager_load = true
+
+  config.consider_all_requests_local = true
 
   config.log_level = :debug
 
   config.hosts.clear
 
-  config.consider_all_requests_local = true
+  config.session_store :cookie_store, key: "_lti_app_session"
 
-  ENV["CANVAS_API_TOKEN"] = "2nm9Xxm4PVyY43BUntTvC2ZcUhM2U8nKaM3EGve77uYwDcw94wYW8LXYJcMvAeYB"
-  ENV["CANVAS_BASE_URL"] = "http://localhost:3000/"
+  config.force_ssl = false
 end
