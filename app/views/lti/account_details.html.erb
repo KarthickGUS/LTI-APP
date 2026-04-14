@@ -209,6 +209,12 @@
         </select>
 
         <button id="export_btn" class="btn-export">Export</button>
+
+        <p id="status"></p>
+
+        <button id="download_btn" style="display:none;">
+          ⬇ Download
+        </button>
       </div>
 
       <div class="dashboard-row">
@@ -278,12 +284,6 @@
       </button>
 
         <button id="export_btn" class="btn-export">Export</button>
-
-        <p id="status"></p>
-
-        <button id="download_btn" style="display:none;">
-          ⬇ Download
-        </button>
       </div>
 
       <div class="table-wrapper hide" id="table_views">
@@ -695,130 +695,157 @@
 </script>
 
 <script>
-  const CANVAS_TOKEN = "<%= ENV['CANVAS_API_TOKEN'] %>";
-</script>
-
-<script>
   let currentPage = 1;
   let currentUserId = null;
 
-  const HEADERS = {
-    "Authorization": `Bearer ${CANVAS_TOKEN}`,
-    "ngrok-skip-browser-warning": "true"
-  };
+  let pollingInterval = null;
+
+  $(document).ready(function () {
+
+    const userId = localStorage.getItem('user_id');
+    const queryId = localStorage.getItem('query_id'); 
+    debugger;
+
+    if (userId && queryId) {
+      pollStatus(userId, queryId);
+    }
+
+  });
 
   $('#export_btn').on('click', function () {
 
     const userId = $('#user_select').val();
-    if (!userId) return;
 
-    const dates = getDates();
+    if (!userId) {
+      alert("Please select a user");
+      return;
+    }
 
-    $('#status').text('Starting export...');
+    $('#status').text('⏳ Starting export...');
     $('#download_btn').hide();
+    $('#export_btn').prop('disabled', true);
 
     $.ajax({
-      url: `/api/v1/users/${userId}/page_views/query`,
+      url: '/page_views/start',
       method: 'POST',
-      headers: HEADERS,
-      data: {
-        start_date: dates.start_date,
-        end_date: dates.end_date,
-        results_format: 'csv'
+      data: { user_id: userId },
+      headers: {
+        "ngrok-skip-browser-warning": "true"
       },
+
       success: function (res) {
 
-        const pollUrl = res.poll_url;
-        const queryId = pollUrl.split('/').pop();
+        console.log("Start Response:", res);
 
-        pollStatus(userId, queryId);
+        if (!res.query_id) {
+          alert("Invalid response from server");
+          resetUI();
+          return;
+        }
+
+        if (res.query_id) {
+          localStorage.setItem('user_id', userId);
+          localStorage.setItem('query_id', res.query_id)
+          $('#status').text("🕒 Refresh later to download.");
+        }
+
+        pollStatus(userId, res.query_id);
       },
+
       error: function (err) {
-        console.error(err);
-        alert('Failed to start export');
+        console.error("Start Error:", err);
+        alert("Failed to start export");
+        resetUI();
       }
     });
+
   });
-
-  function getDates() {
-    const today = new Date();
-
-    const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-    const end   = new Date(today.getFullYear(), today.getMonth(), 1);
-
-    const format = (d) => d.toISOString().split('T')[0];
-
-    return {
-      start_date: format(start),
-      end_date: format(end)
-    };
-  }
 
   function pollStatus(userId, queryId) {
 
-    const interval = setInterval(() => {
+    $.ajax({
+      url: '/page_views/status',
+      method: 'GET',
+      data: {
+        user_id: userId,
+        query_id: queryId
+      },
+      headers: {
+        "ngrok-skip-browser-warning": "true"
+      },
 
-      $.ajax({
-        url: `/api/v1/users/${userId}/page_views/query/${queryId}`,
-        method: 'GET',
-        headers: HEADERS,
-        success: function (res) {
+      success: function (res) {
 
-          $('#status').text("Status: " + res.status);
+        console.log("Status Response:", res);
 
-          if (res.status === 'finished') {
-            clearInterval(interval);
-            showDownload(userId, queryId);
-          }
-
-          if (res.status === 'failed') {
-            clearInterval(interval);
-            alert('Export failed');
-          }
+        if (!res || !res.status) {
+          $('#status').text("⚠️ Invalid status response");
+          return;
         }
-      });
 
-    }, 3000);
+        // Update UI
+        $('#status').text("Status: " + res.status);
+
+        // Handle states
+        if (res.status === 'queued') {
+          $('#status').text("🕒 Queued...");
+        }
+
+        if (res.status === 'running') {
+          $('#status').text("⚙️ Processing...");
+        }
+
+        if (res.status === 'finished') {
+          clearInterval(interval);
+
+          $('#status').text("✅ Ready to download");
+          showDownload(userId, queryId);
+          resetButton();
+        }
+
+        if (res.status === 'failed') {
+          clearInterval(interval);
+
+          $('#status').text("❌ Export failed");
+          alert("Export failed");
+          resetButton();
+        }
+
+      },
+
+      error: function (err) {
+        console.error("Status Error:", err);
+        clearInterval(interval);
+
+        $('#status').text("❌ Status check failed");
+        resetButton();
+      }
+
+    });
   }
 
   function showDownload(userId, queryId) {
-
-    $('#status').text("Ready to download");
-
-    const downloadUrl = `/api/v1/users/${userId}/page_views/query/${queryId}/results`;
 
     $('#download_btn')
       .show()
       .off('click')
       .on('click', function () {
 
-        fetch(downloadUrl, {
-          headers: HEADERS
-        })
-        .then(res => res.blob())
-        .then(blob => {
+        $('#status').text("⬇️ Downloading...");
 
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-
-          a.href = url;
-          a.download = `page_views_${queryId}.csv`;
-          document.body.appendChild(a);
-          a.click();
-
-          a.remove();
-        })
-        .catch(err => {
-          console.error(err);
-          alert("Download failed");
-        });
-
+        // Direct download via backend
+        window.location = `/page_views/download?user_id=${userId}&query_id=${queryId}`;
       });
   }
 
-  function formatDate(date) {
-    if (!date) return '';
-    return new Date(date).toLocaleString();
+  function resetUI() {
+    $('#status').text('');
+    $('#download_btn').hide();
+    resetButton();
+  }
+
+  function resetButton() {
+    $('#export_btn').prop('disabled', false);
   }
 
   $('#user_select').on('change', function () {

@@ -11,6 +11,10 @@ Rails.application.routes.draw do
     get "/courses", to: "accounts#courses"
     get "/user_activity", to: "accounts#user_activity"
   end
+
+  post "/page_views/start",    to: "page_views#start"
+  get  "/page_views/status",   to: "page_views#status"
+  get  "/page_views/download", to: "page_views#download"
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 
   # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
