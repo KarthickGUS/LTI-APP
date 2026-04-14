@@ -25,5 +25,8 @@
 # end
 
 Rails.application.config.content_security_policy do |policy|
-  policy.frame_ancestors :self, "http://localhost:3000", "https://*.instructure.com"
+  policy.frame_ancestors :self,
+  "http://localhost:3000",
+  "https://*.instructure.com",
+  "https://canvaslms.guseducationindia.com"
 end

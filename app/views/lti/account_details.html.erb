@@ -278,6 +278,12 @@
       </button>
 
         <button id="export_btn" class="btn-export">Export</button>
+
+        <p id="status"></p>
+
+        <button id="download_btn" style="display:none;">
+          ⬇ Download
+        </button>
       </div>
 
       <div class="table-wrapper hide" id="table_views">
@@ -689,55 +695,126 @@
 </script>
 
 <script>
+  const CANVAS_TOKEN = "<%= ENV['CANVAS_API_TOKEN'] %>";
+</script>
+
+<script>
   let currentPage = 1;
   let currentUserId = null;
 
+  const HEADERS = {
+    "Authorization": `Bearer ${CANVAS_TOKEN}`,
+    "ngrok-skip-browser-warning": "true"
+  };
+
   $('#export_btn').on('click', function () {
 
-    // ❌ OLD LOGIC (commented)
-    /*
-    currentUserId = $('#user_select').val();
-    if (!currentUserId) return;
-    loadPage();
-    */
+    const userId = $('#user_select').val();
+    if (!userId) return;
+
+    const dates = getDates();
+
+    $('#status').text('Starting export...');
+    $('#download_btn').hide();
 
     $.ajax({
-      url: '/export_course',
-      method: 'GET',
-      dataType: 'json',   // EXPECT JSON
-      headers: {
-        "ngrok-skip-browser-warning": "true"
+      url: `/api/v1/users/${userId}/page_views/query`,
+      method: 'POST',
+      headers: HEADERS,
+      data: {
+        start_date: dates.start_date,
+        end_date: dates.end_date,
+        results_format: 'csv'
       },
-      success: function (data) {
+      success: function (res) {
 
-        console.log("API DATA:", data);
-        
-        const formattedData = data.map(row => ({
-          "Course ID": row.course_id,
-          "Course Name": row.course_name,
-          "Assignment Group ID": row.assignment_group_id,
-          "Assignment Group Name": row.assignment_group_name,
-          "Assignment ID": row.assignment_id,
-          "Assignment Name": row.assignment_name,
-          "Created Date": row.created_date,
-          "Start Date": row.start_date,
-          "Due Date": row.due_date
-        }));
+        const pollUrl = res.poll_url;
+        const queryId = pollUrl.split('/').pop();
 
-        const worksheet = XLSX.utils.json_to_sheet(formattedData);
-        const workbook = XLSX.utils.book_new();
-
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Canvas Export");
-
-        XLSX.writeFile(workbook, "canvas_export.xlsx");
+        pollStatus(userId, queryId);
       },
-      error: function (xhr) {
-        console.error("Error:", xhr.responseText);
-        alert("Export failed");
+      error: function (err) {
+        console.error(err);
+        alert('Failed to start export');
       }
     });
-
   });
+
+  function getDates() {
+    const today = new Date();
+
+    const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const end   = new Date(today.getFullYear(), today.getMonth(), 1);
+
+    const format = (d) => d.toISOString().split('T')[0];
+
+    return {
+      start_date: format(start),
+      end_date: format(end)
+    };
+  }
+
+  function pollStatus(userId, queryId) {
+
+    const interval = setInterval(() => {
+
+      $.ajax({
+        url: `/api/v1/users/${userId}/page_views/query/${queryId}`,
+        method: 'GET',
+        headers: HEADERS,
+        success: function (res) {
+
+          $('#status').text("Status: " + res.status);
+
+          if (res.status === 'finished') {
+            clearInterval(interval);
+            showDownload(userId, queryId);
+          }
+
+          if (res.status === 'failed') {
+            clearInterval(interval);
+            alert('Export failed');
+          }
+        }
+      });
+
+    }, 3000);
+  }
+
+  function showDownload(userId, queryId) {
+
+    $('#status').text("Ready to download");
+
+    const downloadUrl = `/api/v1/users/${userId}/page_views/query/${queryId}/results`;
+
+    $('#download_btn')
+      .show()
+      .off('click')
+      .on('click', function () {
+
+        fetch(downloadUrl, {
+          headers: HEADERS
+        })
+        .then(res => res.blob())
+        .then(blob => {
+
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+
+          a.href = url;
+          a.download = `page_views_${queryId}.csv`;
+          document.body.appendChild(a);
+          a.click();
+
+          a.remove();
+        })
+        .catch(err => {
+          console.error(err);
+          alert("Download failed");
+        });
+
+      });
+  }
 
   function formatDate(date) {
     if (!date) return '';
