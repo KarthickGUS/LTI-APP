@@ -64,4 +64,7 @@ Rails.application.configure do
 
   # Raise error when a before_action's only/except options reference missing actions.
   config.action_controller.raise_on_missing_callback_actions = true
+
+  ENV["CANVAS_API_TOKEN"] = "ZarUJPvHxA38Bz2TWK6M6mykQQzAWKzHVRzHHcnCPZUh82evBW2JRWyCkeEBkLvt"
+  ENV["CANVAS_BASE_URL"] = "https://canvaslms.guseducationindia.com/"
 end
