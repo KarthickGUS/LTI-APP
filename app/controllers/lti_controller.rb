@@ -12,7 +12,7 @@ class LtiController < ApplicationController
     session[:lti_state] = state
     session[:lti_nonce] = nonce
 
-    auth_url = "#{ENV['CANVAS_BASE_URL']}/api/lti/authorize_redirect"
+    auth_url = "#{issuer}/api/lti/authorize_redirect"
 
     query = {
       response_type: "id_token",
@@ -71,13 +71,11 @@ class LtiController < ApplicationController
 
   def account_details
     if params[:error]
-      render plain: "LTI Error: #{params[:error_description]}"
-      return
+      return render plain: "LTI Error: #{params[:error_description]}"
     end
 
     if params[:state] != session[:lti_state]
-      render plain: "Invalid state"
-      return
+      return render plain: "Invalid state"
     end
 
     id_token = params[:id_token]
@@ -86,22 +84,66 @@ class LtiController < ApplicationController
     begin
       decoded_token = decode_lti_token(id_token)
 
+      issuer = decoded_token["iss"]
+      session[:current_issuer] = issuer
+
       account_id = extract_account_id(decoded_token)
 
-      service = CanvasApiService.new
-      users   = service.fetch_users(account_id)
-
-      @users = users.map do |u|
-        {
-          id: u["id"],
-          name: u["name"]
-        }
+      # 🔐 Ensure token exists
+      unless valid_canvas_token?(issuer)
+        session[:return_to] = request.fullpath
+        render_oauth_redirect(issuer)
       end
 
-    rescue => e
-      Rails.logger.error "LTI Error: #{e.message}"
-      render plain: "Something went wrong ❌"
+      load_account_details(issuer)
+
+      rescue => e
+        Rails.logger.error "LTI Error: #{e.message}"
+        render plain: "Something went wrong ❌"
     end
+  end
+
+  def oauth_callback
+    issuer = session[:current_issuer]
+    code   = params[:code]
+
+    if code.blank?
+      unless session[:oauth_attempted]
+        session[:oauth_attempted] = true
+        return redirect_to canvas_oauth_url(issuer), allow_other_host: true
+      else
+        return render plain: "OAuth failed or blocked (possible iframe/session issue)"
+      end
+    end
+
+    response = HTTParty.post(
+      "#{issuer}/login/oauth2/token",
+      body: {
+        grant_type: "authorization_code",
+        code: code,
+        client_id: client_id_for(issuer),
+        client_secret: client_secret_for(issuer),
+        redirect_uri: "#{ENV['APP_BASE_URL']}/oauth/callback"
+      }
+    )
+
+    data = JSON.parse(response.body)
+
+    if data["error"] == "invalid_grant"
+      return redirect_to canvas_oauth_url(issuer), allow_other_host: true
+    end
+
+    session.delete(:oauth_attempted)
+
+    session[:canvas_tokens] ||= {}
+
+    session[:canvas_tokens][issuer] = {
+      access_token: data["access_token"],
+      refresh_token: data["refresh_token"],
+      expires_at: Time.current + data["expires_in"].to_i.seconds
+    }
+
+    load_account_details(issuer)
   end
 
 private
@@ -113,7 +155,7 @@ private
     kid = header["kid"]
     iss = unverified[0]["iss"]
 
-    jwks_url = "#{ENV['CANVAS_BASE_URL']}/api/lti/security/jwks"
+    jwks_url = "#{iss}/api/lti/security/jwks"
 
     jwks = JSON.parse(Net::HTTP.get(URI(jwks_url)))
 
@@ -142,5 +184,108 @@ private
 
     account_id = return_url.match(/accounts\/(\d+)/)&.captures&.first
     account_id
+  end
+
+  def load_account_details(issuer)
+    token = session.dig(:canvas_tokens, issuer, :access_token)
+    service = CanvasApiService.new(token, issuer)
+
+    users = service.fetch_users(1)
+
+    @users = users.map do |u|
+      {
+        id: u["id"],
+        name: u["name"]
+      }
+    end
+
+    render "lti/account_details"
+  end
+
+  def render_oauth_redirect(issuer)
+      url = canvas_oauth_url(issuer)
+
+      render html: "<script>window.top.location.href='#{url}'</script>".html_safe
+  end
+
+  def canvas_oauth_url(issuer)
+    redirect_uri = "#{ENV['APP_BASE_URL']}/oauth/callback"
+
+    scopes = [
+      "url:GET|/api/v1/accounts/:account_id/users",
+      "url:GET|/api/v1/accounts/:account_id/courses"
+    ].join(" ")
+
+    oauth_url = "#{issuer}/login/oauth2/auth?" + {
+      client_id: client_id_for(issuer),
+      response_type: "code",
+      redirect_uri: redirect_uri,
+      scope: scopes
+    }.to_query
+  end
+
+  def valid_canvas_token?(issuer)
+    token_data = session.dig(:canvas_tokens, issuer)
+    return false unless token_data
+
+    token_data = token_data.with_indifferent_access
+
+    access_token = token_data[:access_token]
+    refresh_token = token_data[:refresh_token]
+    expires_at = token_data[:expires_at]
+
+    return false if access_token.blank?
+
+    if expires_at.present? && Time.parse(expires_at.to_s) < Time.current
+      return refresh_canvas_token(issuer)
+    end
+
+    true
+  end
+
+  def refresh_canvas_token(issuer)
+    token_data = session[:canvas_tokens][issuer]
+
+    response = HTTParty.post(
+      "#{issuer}/login/oauth2/token",
+      body: {
+        grant_type: "refresh_token",
+        refresh_token: token_data[:refresh_token],
+        client_id: client_id_for(issuer),
+        client_secret: client_secret_for(issuer)
+      }
+    )
+
+    data = JSON.parse(response.body)
+
+    if data["error"]
+      session[:canvas_tokens].delete(issuer)
+      return false
+    end
+
+    session[:canvas_tokens][issuer][:access_token] = data["access_token"]
+    session[:canvas_tokens][issuer][:refresh_token] = data["refresh_token"] if data["refresh_token"]
+    session[:canvas_tokens][issuer][:expires_at] = Time.current + data["expires_in"].to_i.seconds
+
+    true
+  end
+
+  def canvas_token
+    issuer = session[:current_issuer]
+    session.dig(:canvas_tokens, issuer, "access_token")
+  end
+
+  def canvas_config(issuer)
+    config = CANVAS_APPS[issuer]
+    raise "Missing config for #{issuer}" unless config
+    config
+  end
+
+  def client_id_for(issuer)
+    canvas_config(issuer)[:client_id]
+  end
+
+  def client_secret_for(issuer)
+    canvas_config(issuer)[:client_secret]
   end
 end

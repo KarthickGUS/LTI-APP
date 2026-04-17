@@ -3,7 +3,9 @@ Rails.application.routes.draw do
     post "launch", to: "lti#launch"
     post "oidc",   to: "lti#oidc"
     post "account_details", to: "lti#account_details"
+    get  "account_details", to: "lti#account_details"
   end
+  get "oauth/callback", to: "lti#oauth_callback"
 
   scope :accounts do
     get "/page_views", to: "accounts#page_views"

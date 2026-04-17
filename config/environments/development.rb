@@ -67,6 +67,11 @@ Rails.application.configure do
   # Raise error when a before_action's only/except options reference missing actions.
   config.action_controller.raise_on_missing_callback_actions = true
 
+  config.session_store :cookie_store,
+  key: "_lti_app_session",
+  same_site: :none,
+  secure: true
+
   config.hosts << "stinging-scarecrow-urgent.ngrok-free.dev"
   config.hosts << "unefficacious-unflatteringly-hailey.ngrok-free.dev"
 
@@ -74,6 +79,7 @@ Rails.application.configure do
   # config.generators.apply_rubocop_autocorrect_after_generate!
   ENV["CANVAS_API_TOKEN"] = "2nm9Xxm4PVyY43BUntTvC2ZcUhM2U8nKaM3EGve77uYwDcw94wYW8LXYJcMvAeYB"
   ENV["CANVAS_BASE_URL"] = "http://localhost:3000/"
+  ENV["APP_BASE_URL"] = "https://unefficacious-unflatteringly-hailey.ngrok-free.dev"
 
   ENV["LCCA_TOKEN"] = "LvDp2oSfTPOVEIRj7zXBjeA12ZTTts3gpfxKGMcRhONwVoxo533T0ERenTtXXUnI"
   ENV["LCCA_URL"] = "https://study.lcca.org.uk/"

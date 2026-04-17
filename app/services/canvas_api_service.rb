@@ -1,9 +1,9 @@
 class CanvasApiService
   include HTTParty
 
-  def initialize
-    @base_url = ENV["CANVAS_BASE_URL"]
-    @token    = ENV["CANVAS_API_TOKEN"]
+  def initialize(token, base_url)
+    @base_url = base_url
+    @token    = token
     @headers  = {
       "Authorization" => "Bearer #{@token}"
     }
@@ -15,7 +15,7 @@ class CanvasApiService
       headers: @headers
     )
 
-    raise "Canvas API Error: #{response.body}" unless response.code == 200
+    # raise "Canvas API Error: #{response.body}" unless response.code == 200
 
     JSON.parse(response.body)
   end
