@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Secure Video</title>
+
+  <style>
+    video::-webkit-media-controls-download-button {
+      display: none !important;
+    }
+  </style>
+</head>
+
+<body>
+
+<video 
+  id="my-video-player"
+  width="854"
+  height="480"
+  controls
+  controlsList="nodownload noplaybackrate"
+  disablePictureInPicture
+><source src="https://study.lcca.org.uk/courses/6408/files/1880872/download" type="video/mp4">
+</video>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const video = document.getElementById('my-video-player');
+
+  video.addEventListener('contextmenu', function (e) {
+    e.preventDefault();
+  });
+
+  video.addEventListener('dragstart', function (e) {
+    e.preventDefault();
+  });
+});
+</script>
+
+</body>
+</html>
