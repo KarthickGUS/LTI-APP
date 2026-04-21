@@ -97,9 +97,9 @@ class LtiController < ApplicationController
 
       load_account_details(issuer, account_id)
 
-    rescue => e
-      Rails.logger.error "LTI Error: #{e.message}"
-      render plain: "Something went wrong ❌"
+      # rescue => e
+      #   Rails.logger.error "LTI Error: #{e.message}"
+      #   render plain: "Something went wrong ❌"
     end
   end
 
