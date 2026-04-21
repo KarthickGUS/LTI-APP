@@ -78,3 +78,5 @@ gem "caxlsx_rails"
 gem "axlsx"
 gem "pg"
 gem "whenever", require: false
+gem "sidekiq"
+gem "redis"
